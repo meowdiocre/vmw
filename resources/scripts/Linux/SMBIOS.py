@@ -16,7 +16,7 @@ def get_bytes(path):
 data = get_bytes("/sys/firmware/dmi/tables/smbios_entry_point") + get_bytes("/sys/firmware/dmi/tables/DMI")
 
 # 2. Overwrite UUID bytes
-# System — UUID - https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.9.0.pdf#%5B%7B%22num%22%3A249%2C%22gen%22%3A0%7D%2C%7B%22name%22%3A%22XYZ%22%7D%2C70%2C214%2C0%5D
+# System - UUID - https://www.dmtf.org/sites/default/files/standards/documents/DSP0134_3.9.0.pdf#%5B%7B%22num%22%3A249%2C%22gen%22%3A0%7D%2C%7B%22name%22%3A%22XYZ%22%7D%2C70%2C214%2C0%5D
 # - Quote: "If the value is all FFh, the ID is not currently present in the system, but it can be set. If the value is all 00h, the ID is not present in the system."
 if raw := get_bytes("/sys/class/dmi/id/product_uuid").strip():
 	data = data.replace(UUID(raw.decode()).bytes_le, os.urandom(16)) # ????????-????-????-????-????????????

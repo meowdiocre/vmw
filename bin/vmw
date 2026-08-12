@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# VMW — VM Workspace CLI entrypoint.
+# VMW - VM Workspace CLI entrypoint.
 #
 # Usage:
 #   vmw                        interactive menu
@@ -28,7 +28,7 @@ export VMW_ROOT
 
 usage() {
     cat <<'EOF'
-VMW — VM Workspace
+VMW - VM Workspace
 
 Usage:
   vmw                        Interactive menu

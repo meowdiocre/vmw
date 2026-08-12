@@ -1,6 +1,6 @@
 <div align="center">
 
-# VMW — VM Workspace
+# VMW - VM Workspace
 
 A personal VM workspace for automating Linux virtualization setup, focused on building an undetected VM (patched QEMU, EDK2/OVMF, kernel, VFIO, SMBIOS spoofing).
 
@@ -52,7 +52,7 @@ Domain XML is generated deterministically from the profile by `python/vmw/genxml
 vmw/
 ├── bin/vmw            CLI entrypoint (menu + subcommands)
 ├── lib/               shared bash libraries (colors, log, prompt, config,
-│                      state, run, packages, patches) — loaded via lib/init.sh
+│                      state, run, packages, patches) - loaded via lib/init.sh
 ├── modules/           per-feature scripts (virtualization, qemu, edk2,
 │                      vfio, kernel, lg, deploy)
 ├── python/vmw/        Python tooling package (yaml, state, patches, genxml)

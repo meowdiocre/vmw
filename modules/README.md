@@ -430,7 +430,7 @@ swtpm_setup \
 
 ## Re-provision TPM State
 
-> ⚠️ Delete existing TPM state first — old identity is baked into persistent state.
+> ⚠️ Delete existing TPM state first - old identity is baked into persistent state.
 
 ```bash
 rm -rf <dir>/*; mkdir -p <dir>

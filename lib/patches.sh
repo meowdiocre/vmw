@@ -26,7 +26,7 @@ vmw::check_patch_drift() {
     local stamped
     stamped="$(vmw::patch_version "$patch_path")"
     if [[ -n "$stamped" && "$stamped" != "$expected" ]]; then
-        fmtr::warn "Patch '$patch_path' targets $stamped but $label is $expected — drift detected."
+        fmtr::warn "Patch '$patch_path' targets $stamped but $label is $expected - drift detected."
         prmt::yes_or_no "$(fmtr::ask_inline "Continue anyway?")" || return 1
     fi
     return 0

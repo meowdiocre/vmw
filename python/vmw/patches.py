@@ -72,7 +72,7 @@ def cmd_gen():
 
 def cmd_verify():
     if not os.path.exists(CHECKSUM_FILE):
-        print(f"error: missing {CHECKSUM_FILE} — run 'python3 -m vmw.patches gen'", file=sys.stderr)
+        print(f"error: missing {CHECKSUM_FILE} - run 'python3 -m vmw.patches gen'", file=sys.stderr)
         return 1
 
     expected = {}

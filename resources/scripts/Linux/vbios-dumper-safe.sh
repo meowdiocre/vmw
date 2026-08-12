@@ -28,7 +28,7 @@ fi
 if [[ -n "$current_driver" && -f "$DEV/driver/unbind" ]]; then
     echo "[*] Attempting to unbind from $current_driver..."
     if ! echo "$BDF" > "$DEV/driver/unbind" 2>/dev/null; then
-        echo "[!] Unbind failed — driver is busy."
+        echo "[!] Unbind failed - driver is busy."
         echo "    You may need to stop Display Manager or unload NVIDIA modules first."
         echo "    Try: sudo modprobe -r nvidia-drm nvidia-modeset nvidia-uvm nvidia"
         exit 1
@@ -55,7 +55,7 @@ fi
 # ── Step 3: Dump with timeout ──
 echo "[*] Dumping VBIOS (will timeout after 10s if hung)..."
 if ! timeout 10 bash -c "cat '$DEV/rom' > '$OUT'" 2>/dev/null; then
-    echo "[!] ROM read hung or failed — this is common on laptop GPUs."
+    echo "[!] ROM read hung or failed - this is common on laptop GPUs."
     echo 0 > "$DEV/rom" 2>/dev/null || true
 
     # Rebind if we unbound
@@ -76,7 +76,7 @@ fi
 
 SIZE=$(stat -c%s "$OUT" 2>/dev/null || stat -f%z "$OUT" 2>/dev/null)
 if [[ "$SIZE" -lt 1000 ]]; then
-    echo "[!] Dumped file is too small (${SIZE} bytes) — likely invalid."
+    echo "[!] Dumped file is too small (${SIZE} bytes) - likely invalid."
     rm -f "$OUT"
     exit 1
 fi

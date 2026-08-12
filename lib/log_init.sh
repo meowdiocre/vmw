@@ -4,7 +4,7 @@
 #   - ROOT_ESC (privilege escalation) detection
 #
 # Must be sourced AFTER lib/env.sh.
-# No function definitions here — these run immediately on source.
+# No function definitions here - these run immediately on source.
 
 # =============================================================================
 # LOGGING (init)

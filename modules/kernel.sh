@@ -210,7 +210,7 @@ patch_kernel_files() {
         if [[ -n "$expected_ver" ]]; then
             local kernel_ver="${KERNEL_MAJOR}${KERNEL_MINOR}"
             if [[ "$expected_ver" != *"$kernel_ver"* && "$kernel_ver" != *"$expected_ver"* ]]; then
-                fmtr::warn "Kernel patch '$patch_name' targets $expected_ver but kernel source is $KERNEL_VERSION — drift detected."
+                fmtr::warn "Kernel patch '$patch_name' targets $expected_ver but kernel source is $KERNEL_VERSION - drift detected."
                 if ! prmt::yes_or_no "$(fmtr::ask_inline "Continue anyway?")"; then
                     return 1
                 fi
