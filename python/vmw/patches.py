@@ -20,7 +20,7 @@ CHECKSUM_FILE = os.path.join(PATCH_DIR, "checksums.sha256")
 
 VERSION_RE = re.compile(r"^\s*#\s*(?:Source|Target|Version):\s*(.+?)\s*$", re.I)
 
-PATCH_EXTS = (".patch", ".mypatch", ".dsl", ".aml")
+PATCH_EXTS = (".patch", ".dsl", ".aml")
 
 
 def target_version(patch_path):

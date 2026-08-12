@@ -199,9 +199,9 @@ patch_kernel_files() {
     if vmw::has_cfg patches.kernel && [[ -f "$VMW_ROOT/patches/Kernel/$(vmw::cfg patches.kernel)" ]]; then
         patch_name="$(vmw::cfg patches.kernel)"
     elif [[ "$CPU_MANUFACTURER" == "AMD" ]]; then
-        patch_name="amd${KERNEL_MAJOR}${KERNEL_MINOR}.mypatch"
+        patch_name="amd702.patch"
     elif [[ "$CPU_MANUFACTURER" == "Intel" ]]; then
-        patch_name="intel${KERNEL_MAJOR}${KERNEL_MINOR}.mypatch"
+        patch_name="intel702.patch"
     fi
 
     local user_patch_dir="linux-tkg-userpatches"

@@ -28,7 +28,7 @@ SOURCES = {
 }
 
 ARCHIVE_DIRS = ("Archive",)
-ACTIVE_EXTS = (".patch", ".mypatch")
+ACTIVE_EXTS = (".patch",)
 
 
 def active_patches(component):

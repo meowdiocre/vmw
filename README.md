@@ -2,9 +2,9 @@
 
 # VMW - VM Workspace
 
-A personal VM workspace for automating Linux virtualization setup, focused on building an undetected VM (patched QEMU, EDK2/OVMF, kernel, VFIO, SMBIOS spoofing).
+Automated Linux virtualization setup for an undetected VM: patched QEMU, EDK2/OVMF, kernel, VFIO passthrough, and SMBIOS spoofing.
 
-Mainly taken from [AutoVirt](https://github.com/Scrut1ny/AutoVirt)
+Based on [AutoVirt](https://github.com/Scrut1ny/AutoVirt).
 
 </div>
 
@@ -16,76 +16,66 @@ Mainly taken from [AutoVirt](https://github.com/Scrut1ny/AutoVirt)
 git clone --single-branch --depth=1 https://github.com/meowdiocre/vmw
 cd vmw/
 
-./main.sh plan vmud      # review what will happen (no execution)
+./main.sh plan vmud      # review what will happen, nothing executes
 ./main.sh setup vmud     # run the full automated setup
 ```
 
-Or run the interactive menu:
-
-```sh
-./main.sh
-```
+`./main.sh` runs the interactive menu. It is a thin wrapper around `bin/vmw`.
 
 ## CLI
 
 ```
 vmw                          Interactive menu
-vmw plan <profile>           Dry-run all modules (print commands)
+vmw plan <profile>           Print the plan, execute nothing
 vmw setup <profile>          Run the full automated setup
-vmw deploy <profile>         Generate + define the domain XML
-vmw patch-status             Verify patch integrity + target versions
-vmw patch-check [comp]       Clone sources and verify patches apply cleanly
-vmw status                   Show VMs and profile state
+vmw deploy <profile>         Generate and define the domain XML
+vmw patch-status             Verify patch checksums and target versions
+vmw patch-check [comp]       Clone sources, verify patches apply cleanly
+vmw status                   List profiles, libvirt domains, state
 vmw help                     Show this help
 ```
 
-`./main.sh` is a thin wrapper around `bin/vmw`.
-
 ## Configuration
 
-Each VM is described by a declarative YAML profile in `configs/` (e.g. `configs/vmud.yml`). Values in the profile replace interactive prompts; omit a value to fall back to the prompt in menu mode.
+Each VM is one YAML file in `configs/` (`configs/vmud.yml` is the default profile). Values in the profile replace the interactive prompts; omit a value to fall back to the prompt.
 
-Domain XML is generated deterministically from the profile by `python/vmw/genxml.py` and schema-validated before `virsh define`.
+`python/vmw/genxml.py` turns the profile into a libvirt domain XML, validated against the libvirt schema before `virsh define`.
 
 ## Project layout
 
 ```
 vmw/
 ├── bin/vmw            CLI entrypoint (menu + subcommands)
-├── lib/               shared bash libraries (colors, log, prompt, config,
-│                      state, run, packages, patches) - loaded via lib/init.sh
+├── lib/               bash libraries (config, state, run, packages, ...)
+│                      loaded via lib/init.sh
 ├── modules/           per-feature scripts (virtualization, qemu, edk2,
 │                      vfio, kernel, lg, deploy)
-├── python/vmw/        Python tooling package (yaml, state, patches, genxml)
+├── python/vmw/        Python tooling (yaml, state, patches, genxml, patchcheck)
 ├── configs/           per-VM YAML profiles
-├── patches/           versioned patch artifacts + checksums.sha256
+├── patches/           versioned patches + checksums.sha256
 ├── resources/         helper scripts (SMBIOS, vbios dumpers, ...)
 ├── scripts/           dev workflows (add_patch.sh)
-├── docs/              design docs
-├── .vmw/              local state (gitignored)
+├── .vmw/              local state and caches (gitignored)
 ├── logs/              runtime logs (gitignored)
 └── src/               build artifacts (gitignored)
 ```
 
 ## Patches
 
-Patches are versioned artifacts under `patches/`, verified by SHA256 checksums and stamped with their target source version. Add or update a patch with:
+Every patch under `patches/` is SHA256-verified against `patches/checksums.sha256` and stamped with its target source version. To add or update a patch:
 
 ```sh
 scripts/add_patch.sh patches/QEMU/AMD-v11.0.4.patch v11.0.4
 vmw patch-status
 ```
 
-### Verifying patches apply cleanly
+### Verify patches apply cleanly
 
-`vmw patch-check` clones each source repo at the stamped target version
-(QEMU, EDK2 + submodules, upstream Linux) and runs `git apply --check` on
-every active patch - non-destructive, nothing is actually applied. It flags
-broken or stale patches before a long build.
+`vmw patch-check` clones each source repo at the stamped version (QEMU tag, EDK2 tag with submodules, upstream Linux tag) and runs `git apply --check` on every active patch. It does not apply anything. Run it before a long build to catch broken or stale patches.
 
 ```sh
 vmw patch-check          # all components
-vmw patch-check qemu     # only qemu patches
+vmw patch-check qemu     # one component
 vmw patch-check --purge  # delete cached clones and start fresh
 ```
 
@@ -95,7 +85,7 @@ Cached source trees live in `.vmw/patchcheck/` (gitignored).
 
 - `git`, `python3` + `pyyaml` + `lxml`
 - Supported Linux distribution
-- UEFI/BIOS Settings:
+- UEFI/BIOS settings:
   - CPU virtualization extensions (VT-x / AMD-V)
   - IOMMU support (VT-d / AMD-Vi)
 - A dGPU for passthrough (recommended)
@@ -111,5 +101,5 @@ vfio 0000:01:00.0: failed to setup container for group 13: Failed to set group c
 vfio-pci 0000:01:00.0: Firmware has requested this device have a 1:1 IOMMU mapping, rejecting configuring the device without a 1:1 mapping. Contact your platform vendor.
 ```
 
-- Disable `Pre-boot DMA Protection` (Needed for VFIO)
-  - (*Change `IOMMU` from `[Auto]` to `[Enabled]` to find hidden setting*)
+- Disable `Pre-boot DMA Protection` (needed for VFIO)
+  - Change `IOMMU` from `[Auto]` to `[Enabled]` to find the hidden setting.
