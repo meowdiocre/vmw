@@ -79,7 +79,7 @@ paths:
   iso_path: /var/lib/libvirt/boot/Win10_22H2_English_x64v1.iso
 
 patches:
-  kernel: amd616.mypatch
+  kernel: amd702.mypatch
   qemu: AMD-v11.0.3.patch
   edk2: AMD-edk2-stable202605.patch
 

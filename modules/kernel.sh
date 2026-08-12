@@ -194,10 +194,14 @@ apply_tkg_config() {
 
 patch_kernel_files() {
     local patch_name=""
-    if [[ "$CPU_MANUFACTURER" == "AMD" ]]; then
-        patch_name="amd616.mypatch"
+    # Prefer the profile's configured kernel patch, fall back to a
+    # CPU-appropriate one matching the kernel version being built.
+    if vmw::has_cfg patches.kernel && [[ -f "$VMW_ROOT/patches/Kernel/$(vmw::cfg patches.kernel)" ]]; then
+        patch_name="$(vmw::cfg patches.kernel)"
+    elif [[ "$CPU_MANUFACTURER" == "AMD" ]]; then
+        patch_name="amd${KERNEL_MAJOR}${KERNEL_MINOR}.mypatch"
     elif [[ "$CPU_MANUFACTURER" == "Intel" ]]; then
-        patch_name="intel616.mypatch"
+        patch_name="intel${KERNEL_MAJOR}${KERNEL_MINOR}.mypatch"
     fi
 
     local user_patch_dir="linux-tkg-userpatches"

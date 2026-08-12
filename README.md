@@ -34,6 +34,7 @@ vmw plan <profile>           Dry-run all modules (print commands)
 vmw setup <profile>          Run the full automated setup
 vmw deploy <profile>         Generate + define the domain XML
 vmw patch-status             Verify patch integrity + target versions
+vmw patch-check [comp]       Clone sources and verify patches apply cleanly
 vmw status                   Show VMs and profile state
 vmw help                     Show this help
 ```
@@ -44,7 +45,7 @@ vmw help                     Show this help
 
 Each VM is described by a declarative YAML profile in `configs/` (e.g. `configs/vmud.yml`). Values in the profile replace interactive prompts; omit a value to fall back to the prompt in menu mode.
 
-Domain XML is generated deterministically from the profile by `python/vmw/genxml.py` and schema-validated before `virsh define`. See `docs/PLAN.md` for the full architecture and phase-by-phase breakdown.
+Domain XML is generated deterministically from the profile by `python/vmw/genxml.py` and schema-validated before `virsh define`.
 
 ## Project layout
 
@@ -74,6 +75,21 @@ Patches are versioned artifacts under `patches/`, verified by SHA256 checksums a
 scripts/add_patch.sh patches/QEMU/AMD-v11.0.4.patch v11.0.4
 vmw patch-status
 ```
+
+### Verifying patches apply cleanly
+
+`vmw patch-check` clones each source repo at the stamped target version
+(QEMU, EDK2 + submodules, upstream Linux) and runs `git apply --check` on
+every active patch - non-destructive, nothing is actually applied. It flags
+broken or stale patches before a long build.
+
+```sh
+vmw patch-check          # all components
+vmw patch-check qemu     # only qemu patches
+vmw patch-check --purge  # delete cached clones and start fresh
+```
+
+Cached source trees live in `.vmw/patchcheck/` (gitignored).
 
 ## Prerequisites
 
