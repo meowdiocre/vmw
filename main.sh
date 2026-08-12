@@ -2,20 +2,12 @@
 
 source ./utils.sh || { echo "Failed to load utilities module!"; exit 1; }
 
-
-
-
-
 detect_root() {
   if [[ $EUID -eq 0 ]]; then
     fmtr::fatal "Do not run as root.\n"
     exit 1
   fi
 }
-
-
-
-
 
 detect_distro() {
   EXPERIMENTAL=${EXPERIMENTAL:-0}
@@ -119,7 +111,7 @@ main_menu() {
 
   while :; do
     clear
-    fmtr::box_text " >> AutoVirt << "; echo ""
+    fmtr::box_text " >> VMW << "; echo ""
 
     for i in "${!menu[@]}"; do
       printf '  %b[%d]%b %s\n' \
