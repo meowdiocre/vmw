@@ -1,0 +1,86 @@
+diff --git a/arch/x86/kvm/vmx/vmx.c b/arch/x86/kvm/vmx/vmx.c
+index 8b24e6825..fce93fac0 100644
+--- a/arch/x86/kvm/vmx/vmx.c
++++ b/arch/x86/kvm/vmx/vmx.c
+@@ -6394,6 +6394,19 @@ static int handle_wrmsr_imm(struct kvm_vcpu *vcpu)
+ 				     vmx_get_msr_imm_reg(vcpu));
+ }
+ 
++static int handle_cpuid(struct kvm_vcpu *vcpu)  // NIKA begin
++{
++	vcpu->total_exit_time += 2100;  // Adjust for 100 < VMEXIT < 900
++	u64 tsc = rdtsc();
++	u64 ratio = mul_u64_u64_div_u64(1ULL << kvm_caps.tsc_scaling_ratio_frac_bits, tsc - vcpu->total_exit_time, tsc);
++	if (ratio > 1ULL << (kvm_caps.tsc_scaling_ratio_frac_bits - 2) && ratio < 1ULL << kvm_caps.tsc_scaling_ratio_frac_bits) {
++		kvm_caps.default_tsc_scaling_ratio = ratio;
++		vcpu->arch.tsc_scaling_ratio = ratio;
++		vmcs_write64(TSC_MULTIPLIER, ratio);
++	}
++	return kvm_emulate_cpuid(vcpu);
++}  // NIKA end
++
+ /*
+  * The exit handlers return 1 if the exit was handled fully and guest execution
+  * may resume.  Otherwise they set the kvm_run parameter to indicate what needs
+@@ -6407,7 +6420,8 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
+ 	[EXIT_REASON_IO_INSTRUCTION]          = handle_io,
+ 	[EXIT_REASON_CR_ACCESS]               = handle_cr,
+ 	[EXIT_REASON_DR_ACCESS]               = handle_dr,
+-	[EXIT_REASON_CPUID]                   = kvm_emulate_cpuid,
++//	[EXIT_REASON_CPUID]                   = kvm_emulate_cpuid,  // NIKA removed
++	[EXIT_REASON_CPUID]                   = handle_cpuid,  // NIKA added
+ 	[EXIT_REASON_MSR_READ]                = kvm_emulate_rdmsr,
+ 	[EXIT_REASON_MSR_WRITE]               = kvm_emulate_wrmsr,
+ 	[EXIT_REASON_INTERRUPT_WINDOW]        = handle_interrupt_window,
+@@ -6415,7 +6429,8 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
+ 	[EXIT_REASON_INVD]		      = kvm_emulate_invd,
+ 	[EXIT_REASON_INVLPG]		      = handle_invlpg,
+ 	[EXIT_REASON_RDPMC]                   = kvm_emulate_rdpmc,
+-	[EXIT_REASON_VMCALL]                  = kvm_emulate_hypercall,
++//	[EXIT_REASON_VMCALL]                  = kvm_emulate_hypercall,  // NIKA removed
++	[EXIT_REASON_VMCALL]                  = kvm_handle_invalid_op,  // NIKA added
+ 	[EXIT_REASON_VMCLEAR]		      = handle_vmx_instruction,
+ 	[EXIT_REASON_VMLAUNCH]		      = handle_vmx_instruction,
+ 	[EXIT_REASON_VMPTRLD]		      = handle_vmx_instruction,
+diff --git a/arch/x86/kvm/x86.c b/arch/x86/kvm/x86.c
+index 563475208..f2c66a162 100644
+--- a/arch/x86/kvm/x86.c
++++ b/arch/x86/kvm/x86.c
+@@ -9245,6 +9245,14 @@ static int kvm_vcpu_do_singlestep(struct kvm_vcpu *vcpu)
+ 		kvm_run->exit_reason = KVM_EXIT_DEBUG;
+ 		return 0;
+ 	}
++    if (KVM_GUESTDBG_SINGLESTEP ) {
++        printk(KERN_ALERT "kvm_vcpu_do_singlestep if (KVM_GUESTDBG_SINGLESTEP)  lixiaoliu666 and dds666 return 0\n"); 
++        kvm_run->debug.arch.dr6 = DR6_BS | DR6_ACTIVE_LOW | 1;
++        kvm_run->debug.arch.pc = kvm_get_linear_rip(vcpu);
++        kvm_run->debug.arch.exception = DB_VECTOR;
++        kvm_run->exit_reason = KVM_EXIT_DEBUG;
++        return 0;
++    }
+ 	kvm_queue_exception_p(vcpu, DB_VECTOR, DR6_BS);
+ 	return 1;
+ }
+@@ -10506,6 +10514,8 @@ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_emulate_hypercall);
+ 
+ static int emulator_fix_hypercall(struct x86_emulate_ctxt *ctxt)
+ {
++	return X86EMUL_UNHANDLEABLE;  // NIKA added
++
+ 	struct kvm_vcpu *vcpu = emul_to_vcpu(ctxt);
+ 	char instruction[3];
+ 	unsigned long rip = kvm_rip_read(vcpu);
+diff --git a/include/linux/kvm_host.h b/include/linux/kvm_host.h
+index 8c13426f4..73620d394 100644
+--- a/include/linux/kvm_host.h
++++ b/include/linux/kvm_host.h
+@@ -351,6 +351,9 @@ struct kvm_vcpu {
+ 	unsigned int halt_poll_ns;
+ 	bool valid_wakeup;
+ 
++	u64 last_exit_start;  // NIKA added
++	u64 total_exit_time;  // NIKA added
++
+ #ifdef CONFIG_HAS_IOMEM
+ 	int mmio_needed;
+ 	int mmio_read_completed;
