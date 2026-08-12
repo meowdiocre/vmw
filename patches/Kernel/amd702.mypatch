@@ -1,7 +1,3 @@
-# Source: 7.0
-# Applied by: VMW
-# (checksum tracked in patches/checksums.sha256)
-
 diff --git a/arch/x86/kvm/cpuid.c b/arch/x86/kvm/cpuid.c
 index 8137927e7..5aae3d1c5 100644
 --- a/arch/x86/kvm/cpuid.c
@@ -15,7 +11,7 @@ index 8137927e7..5aae3d1c5 100644
  		/* KVM only supports up to 0x7.2, capped above via min(). */
  		if (max_idx >= 1) {
 diff --git a/arch/x86/kvm/svm/svm.c b/arch/x86/kvm/svm/svm.c
-index e6477affa..20dca1383 100644
+index e6477affa..cf41669a0 100644
 --- a/arch/x86/kvm/svm/svm.c
 +++ b/arch/x86/kvm/svm/svm.c
 @@ -819,6 +819,10 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
@@ -63,44 +59,3 @@ index e6477affa..20dca1383 100644
  	[SVM_EXIT_VMLOAD]			= vmload_interception,
  	[SVM_EXIT_VMSAVE]			= vmsave_interception,
  	[SVM_EXIT_STGI]				= stgi_interception,
-@@ -4367,11 +4382,27 @@ static __no_kcsan fastpath_t svm_vcpu_run(struct kvm_vcpu *vcpu, u64 run_flags)
- 	 * is no need to worry about the conditional branch over the wrmsr
- 	 * being speculatively taken.
- 	 */
-+	// TSC offset compensation.
-+	// Before re-entering the guest, subtract the time spent in the host
-+	// handling the previous VM-exit from the guest TSC offset. The guest
-+	// clock is effectively paused during host processing, so VM-exits are
-+	// invisible to timing analysis.
-+	if (vcpu->last_exit_start) {
-+		u64 host_duration = rdtsc_ordered() - vcpu->last_exit_start;
-+		if (host_duration < 10000000) {  /* Sanity cap ~10M cycles */
-+			vcpu->arch.tsc_offset -= host_duration;
-+			svm_write_tsc_offset(vcpu);
-+		}
-+	}
-+
- 	if (!static_cpu_has(X86_FEATURE_V_SPEC_CTRL))
- 		x86_spec_ctrl_set_guest(svm->virt_spec_ctrl);
- 
- 	svm_vcpu_enter_exit(vcpu, spec_ctrl_intercepted);
- 
-+	// Record the host TSC at VM-exit to measure host processing time.
-+	vcpu->last_exit_start = rdtsc_ordered();
-+
- 	if (!static_cpu_has(X86_FEATURE_V_SPEC_CTRL))
- 		x86_spec_ctrl_restore_host(svm->virt_spec_ctrl);
- 
-diff --git a/include/linux/kvm_host.h b/include/linux/kvm_host.h
-index 6b76e7a6f..6592d26e3 100644
---- a/include/linux/kvm_host.h
-+++ b/include/linux/kvm_host.h
-@@ -350,6 +350,8 @@ struct kvm_vcpu {
- 	unsigned int halt_poll_ns;
- 	bool valid_wakeup;
- 
-+	u64 last_exit_start;  // Host TSC when the current VM-exit began.
-+
- #ifdef CONFIG_HAS_IOMEM
- 	int mmio_needed;
- 	int mmio_read_completed;
