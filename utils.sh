@@ -185,6 +185,134 @@ log::init() {
 }
 
 # =============================================================================
+# CONFIG (YAML profiles)
+# =============================================================================
+
+# Loads a configs/<profile>.yml profile into CFG_* variables.
+#   vmw::load_config <profile>   # e.g. aptwannabe (no .yml suffix)
+# Returns 0 on success, 1 if the profile doesn't exist.
+vmw::load_config() {
+    local profile=$1
+    [[ -n $profile ]] || profile="aptwannabe"
+    CONFIG_PROFILE="$profile"
+    CONFIG_FILE="$(pwd)/configs/${profile}.yml"
+
+    if [[ ! -f "$CONFIG_FILE" ]]; then
+        fmtr::error "Config profile '$profile' not found at $CONFIG_FILE"
+        return 1
+    fi
+
+    local cfg_script
+    cfg_script="$(python3 "$(pwd)/scripts/vmw_yaml.py" "$CONFIG_FILE")" || {
+        fmtr::error "Failed to parse YAML profile '$profile'."
+        return 1
+    }
+
+    # Clear any previously loaded CFG_* values
+    unset CFG_NAME CFG_VM_MEMORY_MIB CFG_VM_VCPUS CFG_VM_OSINFO \
+          CFG_CPU_TOPOLOGY_SOCKETS CFG_CPU_TOPOLOGY_CORES CFG_CPU_TOPOLOGY_THREADS \
+          CFG_CPU_CHECK CFG_CPU_MIGRATABLE CFG_CPU_CACHE CFG_CPU_MAXPHYSADDR \
+          CFG_BOOT_ORDER CFG_BOOT_MENU CFG_BOOT_LOADER CFG_BOOT_LOADER_SECURE CFG_BOOT_NVRAM_TEMPLATE \
+          CFG_FEATURES_HYPERV CFG_FEATURES_KVM_HIDDEN CFG_FEATURES_PMU CFG_FEATURES_VMPORT \
+          CFG_FEATURES_SMM CFG_FEATURES_MSRS_UNKNOWN CFG_FEATURES_PS2 \
+          CFG_HYPERV_MODE CFG_HYPERV_RELAXED CFG_HYPERV_VAPIC CFG_HYPERV_SPINLOCKS \
+          CFG_HYPERV_SPINLOCKS_RETRIES CFG_HYPERV_VENDOR_ID_STATE CFG_HYPERV_VENDOR_ID \
+          CFG_CLOCK_OFFSET CFG_CLOCK_TSC_PRESENT CFG_CLOCK_TSC_MODE CFG_CLOCK_KVMCLOCK_PRESENT \
+          CFG_CLOCK_HYPERVCLOCK_PRESENT CFG_PM_SUSPEND_TO_MEM CFG_PM_SUSPEND_TO_DISK \
+          CFG_DEVICE_EMULATOR CFG_DEVICE_DISK_SIZE_GB CFG_DEVICE_DISK_BUS CFG_DEVICE_DISK_CACHE \
+          CFG_DEVICE_DISK_IO CFG_DEVICE_DISK_BLOCK_LOGICAL CFG_DEVICE_DISK_BLOCK_PHYSICAL \
+          CFG_DEVICE_NIC_MODEL CFG_DEVICE_SOUND_MODEL CFG_DEVICE_AUDIO_TYPE CFG_DEVICE_GRAPHICS \
+          CFG_DEVICE_VIDEO CFG_DEVICE_TPM CFG_DEVICE_TPM_MODEL CFG_DEVICE_MEMBALLOON \
+          CFG_PATHS_DOWNLOADS_DIR CFG_PATHS_ISO_PATH \
+          CFG_PATCHES_KERNEL CFG_PATCHES_QEMU CFG_PATCHES_EDK2 \
+          CFG_EVDEV_ENABLED CFG_EVDEV_GRAB_TOGGLE \
+          CFG_AUDIO_PIPEWIRE CFG_AUDIO_MIXING_ENGINE 2>/dev/null || true
+
+    eval "$cfg_script"
+
+    export CONFIG_PROFILE CONFIG_FILE
+    fmtr::info "Loaded config profile: $profile"
+    return 0
+}
+
+# Returns the value of a CFG_* variable (string), or empty string if unset.
+#   vmw::cfg <path>   # e.g. vm.memory_mib
+vmw::cfg() {
+    local key="CFG_${1//./_}"
+    key="${key//-/_}"
+    if [[ $BASH_VERSION ]]; then
+        printf '%s' "${!key-}"
+    else
+        # zsh indirect expansion
+        printf '%s' "${(P)key:-}"
+    fi
+}
+
+# Returns 0 (true) if the given config path is set and non-empty.
+vmw::has_cfg() {
+    local val
+    val="$(vmw::cfg "$1")"
+    [[ -n $val ]]
+}
+
+# =============================================================================
+# STATE MANIFEST (idempotency / resume)
+# =============================================================================
+
+vmw::state() { python3 "$(pwd)/scripts/vmw_state.py" "$@"; }
+
+# Mark a module step complete.
+vmw::step_done() { vmw::state done "$1" "$2"; }
+# Check if a module step is complete (exit 0 if done).
+vmw::step_done_p() { vmw::state has "module.$1.$2"; }
+
+# =============================================================================
+# DRY-RUN / PLAN MODE
+# =============================================================================
+
+VMW_DRY_RUN=0
+
+vmw::dry_run_on()   { VMW_DRY_RUN=1; }
+vmw::dry_run_off()  { VMW_DRY_RUN=0; }
+vmw::dry_run_p()    { (( VMW_DRY_RUN == 1 )); }
+
+# Runs a command (or prints it) depending on dry-run mode.
+#   vmw::run <cmd...>
+# Prints the command and returns 0 in dry-run mode; otherwise executes it.
+vmw::run() {
+    printf '  %b$ %b' "$TEXT_DIM" "$RESET"
+    printf '%s ' "$@"
+    printf '\n'
+    if vmw::dry_run_p; then
+        return 0
+    fi
+    "$@" &>>"$LOG_FILE"
+}
+
+# Steps through a list of command strings (one per argument), skipping ones
+# already marked done in the state manifest. In dry-run mode prints all
+# pending steps without executing them.
+#   vmw::steps <module> "<cmd string>" "<cmd string>" ...
+vmw::steps() {
+    local module=$1; shift
+    local cmd step
+    for cmd in "$@"; do
+        step="${cmd%% *}"
+        if vmw::step_done_p "$module" "$step"; then
+            fmtr::warn "[$module/$step] already done, skipping."
+            continue
+        fi
+        printf '  %b$ %b%s\n' "$TEXT_DIM" "$RESET" "$cmd"
+        if vmw::dry_run_p; then
+            continue
+        fi
+        bash -c "$cmd" &>>"$LOG_FILE" || { fmtr::error "[$module/$step] failed."; return 1; }
+        vmw::step_done "$module" "$step"
+    done
+    return 0
+}
+
+# =============================================================================
 # AUTO-INIT (when sourced/executed)
 # =============================================================================
 

@@ -1,3 +1,5 @@
 src
 logs
 smbios.bin
+config.xml
+.vmw/
