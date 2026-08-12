@@ -241,9 +241,11 @@ vmw::cfg() {
     local key="CFG_${1//./_}"
     key="${key//-/_}"
     if [[ $BASH_VERSION ]]; then
+        key="${key^^}"
         printf '%s' "${!key-}"
     else
         # zsh indirect expansion
+        key="${(U)key}"
         printf '%s' "${(P)key:-}"
     fi
 }

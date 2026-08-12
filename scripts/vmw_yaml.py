@@ -27,6 +27,7 @@ def main():
     flatten("", data, out)
     for key in sorted(out):
         bash_key = f"CFG_{key.replace('.', '_').replace('-', '_')}"
+        bash_key = bash_key.upper()
         value = out[key].replace('"', '\\"')
         print(f'{bash_key}="{value}"')
 
