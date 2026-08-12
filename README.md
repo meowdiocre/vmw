@@ -16,16 +16,21 @@ Based on [AutoVirt](https://github.com/Scrut1ny/AutoVirt).
 git clone --single-branch --depth=1 https://github.com/meowdiocre/vmw
 cd vmw/
 
-./main.sh plan vmud      # review what will happen, nothing executes
-./main.sh setup vmud     # run the full automated setup
+vmw plan vmud      # review what will happen, nothing executes
+vmw                # guided step-by-step setup
 ```
 
-`./main.sh` runs the interactive menu. It is a thin wrapper around `bin/vmw`.
+`vmw` (no arguments) runs a guided setup that builds an undetected VM step by
+step, in dependency order: kernel, QEMU, EDK2/OVMF, GPU passthrough, Looking
+Glass, then deploy. Each step asks for confirmation and records completion in
+`.vmw/state.json`, so re-running skips finished steps. `./main.sh` is a thin
+wrapper around `bin/vmw`.
 
 ## CLI
 
 ```
-vmw                          Interactive menu
+vmw [profile]                Guided step-by-step setup (default vmud)
+vmw menu                     Interactive menu (pick any module)
 vmw plan <profile>           Print the plan, execute nothing
 vmw setup <profile>          Run the full automated setup
 vmw deploy <profile>         Generate and define the domain XML
@@ -45,7 +50,7 @@ Each VM is one YAML file in `configs/` (`configs/vmud.yml` is the default profil
 
 ```
 vmw/
-├── bin/vmw            CLI entrypoint (menu + subcommands)
+├── bin/vmw            CLI entrypoint (guided setup + subcommands)
 ├── lib/               bash libraries (config, state, run, packages, ...)
 │                      loaded via lib/init.sh
 ├── modules/           per-feature scripts (virtualization, qemu, edk2,

@@ -28,3 +28,8 @@ export VMW_ROOT
 . "$VMW_ROOT/lib/packages.sh"
 # shellcheck source=patches.sh
 . "$VMW_ROOT/lib/patches.sh"
+# shellcheck source=host.sh
+. "$VMW_ROOT/lib/host.sh"
+
+# Auto-detect the host (DISTRO + CPU) once, for every script.
+vmw::detect_host

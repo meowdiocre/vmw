@@ -32,14 +32,15 @@ usage() {
 VMW - VM Workspace
 
 Usage:
-  vmw                        Interactive menu
-  vmw plan <profile>         Dry-run all modules (print commands)
-  vmw setup <profile>        Run the full automated setup
-  vmw deploy <profile>       Generate + define the domain XML
-  vmw patch-status           Verify patch integrity + target versions
-  vmw patch-check [comp]     Clone sources and verify patches apply cleanly
-  vmw status                 Show VMs and profile state
-  vmw help                   Show this help
+  vmw [profile]                Guided step-by-step setup (default vmud)
+  vmw menu                     Interactive menu (pick any module)
+  vmw setup <profile>          Run the full automated setup (no prompts)
+  vmw plan <profile>           Dry-run all modules (print commands)
+  vmw deploy <profile>         Generate + define the domain XML
+  vmw patch-status             Verify patch integrity + target versions
+  vmw patch-check [comp]       Clone sources and verify patches apply cleanly
+  vmw status                   Show VMs and profile state
+  vmw help                     Show this help
 EOF
 }
 
@@ -69,11 +70,79 @@ cmd_setup() {
     vmw::load_config "$profile" || return 1
     fmtr::box_text "SETUP: $profile"
     vmw::verify_patches || { fmtr::error "Patch verification failed. Run 'vmw patch-status'."; return 1; }
-    for mod in virtualization qemu edk2 vfio kernel lg deploy; do
+    # Build an undetected VM in dependency order: kernel first so the boot
+    # entry exists, then emulator/firmware, then passthrough, then deploy.
+    for mod in virtualization kernel qemu edk2 vfio lg deploy; do
         fmtr::info "[$mod] running..."
         "$VMW_ROOT/modules/$mod.sh" || { fmtr::error "[$mod] failed."; return 1; }
     done
     fmtr::log "Setup complete for profile '$profile'."
+}
+
+# Steps that make up the guided build of an undetected VM, in order.
+Vmw_GUIDED_STEPS=(
+    "virtualization|Install virtualization stack (libvirt, QEMU, swtpm)|Install the libvirt/KVM stack so the VM can run"
+    "kernel|Build patched kernel (linux-tkg)|Build and install the patched kernel, then set up its boot entry"
+    "qemu|Build patched QEMU|Clone, patch, and build the anti-detection QEMU"
+    "edk2|Build patched EDK2/OVMF|Clone, patch, and build the anti-detection UEFI firmware"
+    "vfio|Configure GPU passthrough|Set up VFIO/IOMMU and bootloader for a passed-through dGPU"
+    "lg|Install Looking Glass|Install the low-latency Looking Glass frame-capture client"
+    "deploy|Deploy VM from profile|Generate the domain XML and define the VM"
+)
+
+cmd_guided() {
+    local profile=$1
+    vmw::load_config "$profile" || return 1
+
+    fmtr::box_text "VMW guided setup: $profile"
+    echo ""
+    fmtr::info "This will build an undetected VM step by step:"
+    local i step label desc
+    for i in "${!Vmw_GUIDED_STEPS[@]}"; do
+        step="${Vmw_GUIDED_STEPS[$i]}"
+        label="${step#*|}"
+        desc="${label#*|}"
+        label="${label%%|*}"
+        printf '  %b%2d.%b %s\n' "$TEXT_BRIGHT_YELLOW" "$((i+1))" "$RESET" "$label"
+    done
+    echo ""
+    prmt::yes_or_no "$(fmtr::ask_inline "Review the plan first (vmw plan $profile)?")" && { cmd_plan "$profile"; }
+
+    if ! vmw::verify_patches; then
+        fmtr::error "Patch verification failed. Run 'vmw patch-status' before continuing."
+        return 1
+    fi
+
+    for i in "${!Vmw_GUIDED_STEPS[@]}"; do
+        local step="${Vmw_GUIDED_STEPS[$i]}"
+        local mod="${step%%|*}"
+        local label="${step#*|}"
+        local desc="${label#*|}"
+        label="${label%%|*}"
+
+        echo ""
+        fmtr::box_text "Step $((i+1))/${#Vmw_GUIDED_STEPS[@]}: $label"
+        fmtr::info "$desc"
+        echo ""
+
+        if vmw::step_done_p "$mod" complete; then
+            fmtr::info "Step already completed. Skipping."
+        elif prmt::yes_or_no "$(fmtr::ask_inline "Run this step now?")"; then
+            if "$VMW_ROOT/modules/$mod.sh"; then
+                vmw::step_done "$mod" complete
+                fmtr::log "Step $((i+1)) ($label) completed."
+            else
+                fmtr::error "Step $((i+1)) ($label) failed. See $LOG_FILE"
+                prmt::yes_or_no "$(fmtr::ask_inline "Continue to the next step anyway?")" || return 1
+            fi
+        else
+            fmtr::warn "Skipped step $((i+1)) ($label)."
+        fi
+    done
+
+    echo ""
+    fmtr::box_text "Guided setup finished"
+    fmtr::info "Next: start the VM with: $ROOT_ESC virsh start '${CFG_NAME:-$profile}'"
 }
 
 cmd_deploy() {
@@ -166,15 +235,17 @@ main_menu() {
     done
 }
 
-cmd="${1:-menu}"
+cmd="${1:-guided}"
 case "$cmd" in
-    menu|"") main_menu ;;
-    plan) shift; cmd_plan "${1:-vmud}" ;;
+    guided) shift; cmd_guided "${1:-vmud}" ;;
+    menu) main_menu ;;
     setup) shift; cmd_setup "${1:-vmud}" ;;
+    plan) shift; cmd_plan "${1:-vmud}" ;;
     deploy) shift; cmd_deploy "$@" ;;
     patch-status) cmd_patch_status ;;
     patch-check) shift; cmd_patch_check "$@" ;;
     status) cmd_status ;;
     help|-h|--help) usage ;;
-    *) fmtr::error "Unknown command: $cmd"; echo; usage; exit 1 ;;
+    -*) fmtr::error "Unknown option: $cmd"; echo; usage; exit 1 ;;
+    *) cmd_guided "$cmd" ;;
 esac
