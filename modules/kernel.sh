@@ -199,17 +199,17 @@ patch_kernel_files() {
     if vmw::has_cfg patches.kernel && [[ -f "$VMW_ROOT/patches/Kernel/$(vmw::cfg patches.kernel)" ]]; then
         patch_name="$(vmw::cfg patches.kernel)"
     elif [[ "$CPU_MANUFACTURER" == "AMD" ]]; then
-        patch_name="amd702.patch"
+        patch_name="amd702.mypatch"
     elif [[ "$CPU_MANUFACTURER" == "Intel" ]]; then
-        patch_name="intel702.patch"
+        patch_name="intel702.mypatch"
     fi
 
-    # tkg reads user patches from a version-specific dir with a .mypatch
-    # extension (e.g. linux70-tkg-userpatches/amd702.mypatch).
+    # tkg reads user patches from a version-specific dir (e.g.
+    # linux70-tkg-userpatches/) and requires the .mypatch extension, which
+    # is what the repo files use.
     local basever="${KERNEL_MAJOR}${KERNEL_MINOR}"
     local user_patch_dir="linux${basever}-tkg-userpatches"
     local source_patch="$VMW_ROOT/patches/Kernel/$patch_name"
-    local dest_name="${patch_name%.patch}.mypatch"
 
     if [[ -n "$patch_name" && -f "$source_patch" ]]; then
         # Verify patch integrity before staging
@@ -225,8 +225,8 @@ patch_kernel_files() {
             fi
         fi
         mkdir -p "$user_patch_dir"
-        cp "$source_patch" "$user_patch_dir/$dest_name"
-        fmtr::info "Copied user patch: $dest_name → $user_patch_dir/"
+        cp "$source_patch" "$user_patch_dir/"
+        fmtr::info "Copied user patch: $patch_name → $user_patch_dir/"
     else
         fmtr::warn "Patch file not found: $source_patch"
     fi
