@@ -4,3 +4,5 @@ smbios.bin
 config.xml
 configs/*.xml
 .vmw/
+__pycache__/
+*.pyc
