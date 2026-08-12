@@ -17,7 +17,7 @@ cpu:
     cores: 4
     threads: 2
   check: none
-  migratable: off
+  migratable: "off"
   cache: passthrough
   maxphysaddr: passthrough
 
@@ -82,6 +82,9 @@ patches:
   kernel: amd616.mypatch
   qemu: AMD-v11.0.3.patch
   edk2: AMD-edk2-stable202605.patch
+
+smbios:
+  file: /opt/AutoVirt/firmware/smbios.bin
 
 evdev:
   enabled: true
