@@ -162,7 +162,7 @@ def build_xml(cfg, domain_name=None):
     d = e(devices, "disk", type="file", device="disk")
     e(d, "driver", name="qemu", type="qcow2", cache=disk.get("disk_cache", "none"),
       io=disk.get("disk_io", "native"), discard="unmap")
-    e(d, "source", file=f"/var/lib/libvirt/images/{domain_name}.qcow2")
+    e(d, "source", file=disk.get("disk_path", f"/var/lib/libvirt/images/{domain_name}.qcow2"))
     e(d, "target", dev="nvme0n1", bus=disk.get("disk_bus", "nvme"))
     e(d, "blockio",
       logical_block_size=disk.get("disk_block_logical", 4096),
