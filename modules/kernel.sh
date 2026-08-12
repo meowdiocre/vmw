@@ -204,8 +204,12 @@ patch_kernel_files() {
         patch_name="intel702.patch"
     fi
 
-    local user_patch_dir="linux-tkg-userpatches"
+    # tkg reads user patches from a version-specific dir with a .mypatch
+    # extension (e.g. linux70-tkg-userpatches/amd702.mypatch).
+    local basever="${KERNEL_MAJOR}${KERNEL_MINOR}"
+    local user_patch_dir="linux${basever}-tkg-userpatches"
     local source_patch="$VMW_ROOT/patches/Kernel/$patch_name"
+    local dest_name="${patch_name%.patch}.mypatch"
 
     if [[ -n "$patch_name" && -f "$source_patch" ]]; then
         # Verify patch integrity before staging
@@ -221,8 +225,8 @@ patch_kernel_files() {
             fi
         fi
         mkdir -p "$user_patch_dir"
-        cp "$source_patch" "$user_patch_dir/"
-        fmtr::info "Copied user patch: $patch_name"
+        cp "$source_patch" "$user_patch_dir/$dest_name"
+        fmtr::info "Copied user patch: $dest_name → $user_patch_dir/"
     else
         fmtr::warn "Patch file not found: $source_patch"
     fi
@@ -275,16 +279,62 @@ EOF
     fmtr::info "Boot entries created successfully."
 }
 
+create_grub_entry() {
+    if ! prmt::yes_or_no "$(fmtr::ask_inline 'Create GRUB entry for the patched kernel?')"; then
+        return
+    fi
+
+    local kernel_tag="linux${KERNEL_MAJOR}${KERNEL_MINOR}-tkg-eevdf"
+    local root_dev partuuid fstype options
+
+    root_dev=$(findmnt -n -o SOURCE /)
+    partuuid=$(blkid -s PARTUUID -o value "${root_dev%\[*}")
+    fstype=$(findmnt -n -o FSTYPE /)
+    options="root=PARTUUID=${partuuid} rw rootfstype=${fstype}"
+
+    local grub_cfg="/etc/grub.d/40_custom"
+    fmtr::info "Appending a GRUB menuentry to $grub_cfg..."
+
+    cat <<EOF | $ROOT_ESC tee -a "$grub_cfg" >/dev/null
+
+# Added by VMW: patched anti-detection kernel
+menuentry "HvP-RDTSC (linux-tkg eevdf)" --class kernel --class os {
+    load_video
+    set gfxpayload=keep
+    insmod gzio
+    insmod part_gpt
+    insmod ext2
+    echo 'Loading Linux $kernel_tag ...'
+    linux /vmlinuz-$kernel_tag $options
+    echo 'Loading initial ramdisk ...'
+    initrd /initramfs-$kernel_tag.img
+}
+EOF
+
+    $ROOT_ESC grub-mkconfig -o /boot/grub/grub.cfg &>>"$LOG_FILE"
+    fmtr::log "GRUB entry created and grub.cfg regenerated."
+    fmtr::warn "The patched kernel is added as 'HvP-RDTSC' in the GRUB menu."
+}
+
 build_arch() {
     fmtr::info "Starting Arch Linux build (makepkg)..."
     makepkg -C -si --noconfirm
-    create_systemd_boot_entry
+    # Add a boot entry for the installed kernel (GRUB or systemd-boot).
+    if [[ -d /boot/loader/entries || -d /boot/efi/loader/entries || -d /efi/loader/entries ]]; then
+        create_systemd_boot_entry
+    else
+        create_grub_entry
+    fi
 }
 
 build_generic() {
     fmtr::info "Starting Generic build (install.sh)..."
     ./install.sh install
-    create_systemd_boot_entry
+    if [[ -d /boot/loader/entries || -d /boot/efi/loader/entries || -d /efi/loader/entries ]]; then
+        create_systemd_boot_entry
+    else
+        create_grub_entry
+    fi
 }
 
 # ==============================================================================

@@ -1,8 +1,7 @@
 # VMW per-VM profile
 # Values here override interactive prompts in modules. Omit a value to
 # fall back to the interactive prompt (menu mode).
-#
-# Reference: see PLAN.md Phase 1 for the full schema.
+
 
 name: vmud
 

@@ -20,14 +20,6 @@ vmw plan vmud      # review what will happen, nothing executes
 vmw                # guided step-by-step setup
 ```
 
-`vmw` (no arguments) runs a guided setup that builds an undetected VM step by
-step, in dependency order: kernel, QEMU, EDK2/OVMF, GPU passthrough, then
-deploy. Each step asks for confirmation. A step is skipped when it
-is already done, detected two ways: the state manifest (`.vmw/state.json`,
-what this repo has run) and real-system probes (installed kernel, `/opt/vmw`
-binaries, libvirt services and network, vfio-pci bindings, defined domain).
-`./main.sh` is a thin wrapper around `bin/vmw`.
-
 ## CLI
 
 ```
