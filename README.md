@@ -22,9 +22,11 @@ vmw                # guided step-by-step setup
 
 `vmw` (no arguments) runs a guided setup that builds an undetected VM step by
 step, in dependency order: kernel, QEMU, EDK2/OVMF, GPU passthrough, Looking
-Glass, then deploy. Each step asks for confirmation and records completion in
-`.vmw/state.json`, so re-running skips finished steps. `./main.sh` is a thin
-wrapper around `bin/vmw`.
+Glass, then deploy. Each step asks for confirmation. A step is skipped when it
+is already done, detected two ways: the state manifest (`.vmw/state.json`,
+what this repo has run) and real-system probes (installed kernel, `/opt/vmw`
+binaries, libvirt services and network, vfio-pci bindings, Looking Glass
+client, defined domain). `./main.sh` is a thin wrapper around `bin/vmw`.
 
 ## CLI
 

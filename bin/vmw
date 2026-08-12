@@ -125,8 +125,10 @@ cmd_guided() {
         fmtr::info "$desc"
         echo ""
 
-        if vmw::step_done_p "$mod" complete; then
-            fmtr::info "Step already completed. Skipping."
+        if vmw::state has "module.$mod.complete"; then
+            fmtr::info "Step already completed in this session's state. Skipping."
+        elif vmw::step_ready "$mod"; then
+            fmtr::info "Step already set up on this system. Skipping."
         elif prmt::yes_or_no "$(fmtr::ask_inline "Run this step now?")"; then
             if "$VMW_ROOT/modules/$mod.sh"; then
                 vmw::step_done "$mod" complete

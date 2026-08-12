@@ -28,8 +28,12 @@ vmw::load_config() {
         return 1
     }
 
-    # Clear any previously loaded CFG_* values
-    unset ${!CFG_@} 2>/dev/null || true
+    # Clear any previously loaded CFG_* values (portable to bash + zsh).
+    if [[ $BASH_VERSION ]]; then
+        unset "${!CFG_@}" 2>/dev/null || true
+    else
+        unset ${(k)parameters[(I)CFG_*]} 2>/dev/null || true
+    fi
 
     eval "$cfg_script"
 

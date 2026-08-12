@@ -7,5 +7,4 @@ vmw::state() { PYTHONPATH="$VMW_ROOT/python" python3 -m vmw.state "$@"; }
 
 # Mark a module step complete.
 vmw::step_done() { vmw::state done "$1" "$2"; }
-# Check if a module step is complete (exit 0 if done).
-vmw::step_done_p() { vmw::state has "module.$1.$2"; }
+# vmw::step_done_p is defined in lib/probe.sh (manifest + real-system check).
