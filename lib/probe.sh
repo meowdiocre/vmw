@@ -62,13 +62,6 @@ vmw::step_ready() {
             return 1
             ;;
 
-        lg)
-            # Looking Glass client installed.
-            [[ -x /usr/local/bin/looking-glass-client ]] && return 0
-            command -v looking-glass-client >/dev/null 2>&1 && return 0
-            return 1
-            ;;
-
         deploy)
             # The domain from the profile is defined in libvirt.
             local domain="${CONFIG_PROFILE:-vmud}"
