@@ -1,3 +1,7 @@
+# Source: v11.0.3
+# Applied by: VMW
+# (checksum tracked in patches/checksums.sha256)
+
 diff --git a/hw/acpi/aml-build.c b/hw/acpi/aml-build.c
 index a999320..8fcb707 100644
 --- a/hw/acpi/aml-build.c

@@ -121,6 +121,17 @@ acquire_qemu_source() {
 
 patch_qemu() {
   [ -f "$QEMU_PATCH" ] || { fmtr::error "Missing '$QEMU_PATCH' patch file!"; return 1; }
+
+  # Verify patch integrity before applying
+  local expected_ver
+  expected_ver="$(python3 "$(pwd)/scripts/vmw_patches.py" version "$QEMU_PATCH")"
+  if [[ -n "$expected_ver" && "$expected_ver" != "$QEMU_TAG" ]]; then
+    fmtr::warn "Patch '$QEMU_PATCH' targets $expected_ver but QEMU source is $QEMU_TAG — drift detected."
+    if ! prmt::yes_or_no "$(fmtr::ask_inline "Apply anyway?")"; then
+      return 1
+    fi
+  fi
+
   git apply < "$QEMU_PATCH" &>>"$LOG_FILE" || { fmtr::error "Failed to apply '$QEMU_PATCH'!"; return 1; }
   fmtr::log "Applied '${CPU_MANUFACTURER}-${QEMU_TAG}.patch' successfully."
 

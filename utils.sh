@@ -313,6 +313,20 @@ vmw::steps() {
 }
 
 # =============================================================================
+# PATCH INTEGRITY
+# =============================================================================
+
+# Verify all tracked patches against patches/checksums.sha256.
+# In dry-run mode prints the check only. Returns 0 on success.
+vmw::verify_patches() {
+    if vmw::dry_run_p; then
+        printf '  %b$ %b%s\n' "$TEXT_DIM" "$RESET" "python3 scripts/vmw_patches.py verify"
+        return 0
+    fi
+    python3 "$(pwd)/scripts/vmw_patches.py" verify &>>"$LOG_FILE"
+}
+
+# =============================================================================
 # AUTO-INIT (when sourced/executed)
 # =============================================================================
 

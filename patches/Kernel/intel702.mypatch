@@ -1,3 +1,7 @@
+# Source: 7.02
+# Applied by: VMW
+# (checksum tracked in patches/checksums.sha256)
+
 diff --git a/arch/x86/kvm/vmx/vmx.c b/arch/x86/kvm/vmx/vmx.c
 index 8b24e6825..fce93fac0 100644
 --- a/arch/x86/kvm/vmx/vmx.c

@@ -1,3 +1,7 @@
+# Source: v11.0.3
+# Applied by: VMW
+# (checksum tracked in patches/checksums.sha256)
+
 diff --git a/hw/display/qxl.c b/hw/display/qxl.c
 index 3d4b563..7626411 100644
 --- a/hw/display/qxl.c

@@ -1,3 +1,7 @@
+# Source: edk2-stable202605
+# Applied by: VMW
+# (checksum tracked in patches/checksums.sha256)
+
 diff --git a/MdeModulePkg/MdeModulePkg.dec b/MdeModulePkg/MdeModulePkg.dec
 index 5d7df5f..7ae1853 100644
 --- a/MdeModulePkg/MdeModulePkg.dec

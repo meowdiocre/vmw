@@ -1,3 +1,7 @@
+# Source: 6.16
+# Applied by: VMW
+# (checksum tracked in patches/checksums.sha256)
+
 --- a/arch/x86/kvm/svm/svm.c	2025-10-12 12:01:05.000000000 +0100
 +++ b/arch/x86/kvm/svm/svm.c	2026-04-28 20:45:42.179257976 +0100
 @@ -1250,7 +1250,8 @@

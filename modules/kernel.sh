@@ -208,6 +208,18 @@ patch_kernel_files() {
     local source_patch="../../patches/Kernel/$patch_name"
 
     if [[ -n "$patch_name" && -f "$source_patch" ]]; then
+        # Verify patch integrity before staging
+        local expected_ver
+        expected_ver="$(python3 "$(pwd)/scripts/vmw_patches.py" version "$source_patch")"
+        if [[ -n "$expected_ver" ]]; then
+            local kernel_ver="${KERNEL_MAJOR}${KERNEL_MINOR}"
+            if [[ "$expected_ver" != *"$kernel_ver"* && "$kernel_ver" != *"$expected_ver"* ]]; then
+                fmtr::warn "Kernel patch '$patch_name' targets $expected_ver but kernel source is $KERNEL_VERSION — drift detected."
+                if ! prmt::yes_or_no "$(fmtr::ask_inline "Continue anyway?")"; then
+                    return 1
+                fi
+            fi
+        fi
         mkdir -p "$user_patch_dir"
         cp "$source_patch" "$user_patch_dir/"
         fmtr::info "Copied user patch: $patch_name"

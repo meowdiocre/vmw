@@ -115,6 +115,16 @@ patch_ovmf() {
   # --- Phase 1: Source Patching ---
   [ -f "$OVMF_PATCH" ] || { fmtr::error "Patch file missing"; return 1; }
 
+  # Verify patch integrity before applying
+  local expected_ver
+  expected_ver="$(python3 "$(pwd)/scripts/vmw_patches.py" version "$OVMF_PATCH")"
+  if [[ -n "$expected_ver" && "$expected_ver" != "$EDK2_TAG" ]]; then
+    fmtr::warn "Patch '$OVMF_PATCH' targets $expected_ver but EDK2 source is $EDK2_TAG — drift detected."
+    if ! prmt::yes_or_no "$(fmtr::ask_inline "Apply anyway?")"; then
+      return 1
+    fi
+  fi
+
   git apply < "$OVMF_PATCH" &>>"$LOG_FILE" || {
     fmtr::error "Patch application failed"; return 1;
   }

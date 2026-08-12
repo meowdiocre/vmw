@@ -1,3 +1,7 @@
+# Source: 7.02
+# Applied by: VMW
+# (checksum tracked in patches/checksums.sha256)
+
 diff --git a/arch/x86/kvm/cpuid.c b/arch/x86/kvm/cpuid.c
 index 8137927e7..b4d2d45a7 100644
 --- a/arch/x86/kvm/cpuid.c
