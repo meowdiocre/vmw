@@ -1,19 +1,14 @@
 <div align="center">
 
-# AutoVirt
+# VMW — VM Workspace
 
-This project automates complex Linux virtualization tasks.
+A personal VM workspace for automating Linux virtualization setup.
 
 [![](https://dcbadge.limes.pink/api/server/https://discord.gg/hNVHChp7PX)](https://discord.gg/hNVHChp7PX)
 
 </div>
 
 ---
-
-
-
-
-
 
 ## Instructions
 
@@ -22,12 +17,12 @@ This project automates complex Linux virtualization tasks.
 
 #### 1. Clone Git repository
 ```sh
-git clone --single-branch --depth=1 https://github.com/Scrut1ny/AutoVirt
+git clone --single-branch --depth=1 https://github.com/meowdiocre/vmw
 ```
 
 #### 2. Change directory
 ```sh
-cd AutoVirt/
+cd vmw/
 ```
 
 #### 3. Execute
@@ -42,16 +37,12 @@ EXPERIMENTAL=1 ./main.sh
 ---
 
 ### 4. Update repository
-- ***Make sure you're in the `AutoVirt/` root directory when running the command below!***
+- ***Make sure you're in the `vmw/` root directory when running the command below!***
 ```sh
 git fetch --all && git reset --hard origin/main
 ```
 
 </details>
-
-
-
-
 
 ---
 
