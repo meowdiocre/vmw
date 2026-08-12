@@ -16,8 +16,8 @@ Mainly taken from [AutoVirt](https://github.com/Scrut1ny/AutoVirt)
 git clone --single-branch --depth=1 https://github.com/meowdiocre/vmw
 cd vmw/
 
-./main.sh plan aptwannabe      # review what will happen (no execution)
-./main.sh setup aptwannabe     # run the full automated setup
+./main.sh plan vmud      # review what will happen (no execution)
+./main.sh setup vmud     # run the full automated setup
 ```
 
 Or run the interactive menu:
@@ -42,7 +42,7 @@ vmw help                     Show this help
 
 ## Configuration
 
-Each VM is described by a declarative YAML profile in `configs/` (e.g. `configs/aptwannabe.yml`). Values in the profile replace interactive prompts; omit a value to fall back to the prompt in menu mode.
+Each VM is described by a declarative YAML profile in `configs/` (e.g. `configs/vmud.yml`). Values in the profile replace interactive prompts; omit a value to fall back to the prompt in menu mode.
 
 Domain XML is generated deterministically from the profile by `python/vmw/genxml.py` and schema-validated before `virsh define`. See `docs/PLAN.md` for the full architecture and phase-by-phase breakdown.
 

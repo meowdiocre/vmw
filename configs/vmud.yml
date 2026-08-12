@@ -4,7 +4,7 @@
 #
 # Reference: see PLAN.md Phase 1 for the full schema.
 
-name: aptwannabe
+name: vmud
 
 vm:
   memory_mib: 12288

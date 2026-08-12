@@ -9,11 +9,11 @@
 vmw::py() { PYTHONPATH="$VMW_ROOT/python" python3 -m vmw "$@"; }
 
 # Loads a configs/<profile>.yml profile into CFG_* variables.
-#   vmw::load_config <profile>   # e.g. aptwannabe (no .yml suffix)
+#   vmw::load_config <profile>   # e.g. vmud (no .yml suffix)
 # Returns 0 on success, 1 if the profile doesn't exist.
 vmw::load_config() {
     local profile=$1
-    [[ -n $profile ]] || profile="aptwannabe"
+    [[ -n $profile ]] || profile="vmud"
     CONFIG_PROFILE="$profile"
     CONFIG_FILE="$VMW_ROOT/configs/${profile}.yml"
 

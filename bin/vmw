@@ -137,7 +137,7 @@ main_menu() {
         clear
 
         case "$choice" in
-            8) cmd_plan "${CONFIG_PROFILE:-aptwannabe}";;
+            8) cmd_plan "${CONFIG_PROFILE:-vmud}";;
             9) cmd_status;;
             *)
                 if (( choice >= 1 && choice <= ${#menu[@]} )); then
@@ -146,7 +146,7 @@ main_menu() {
                     local script="${menu[idx]#*|}"
                     fmtr::box_text "$label"
                     if [[ -n "$script" ]]; then
-                        "$VMW_ROOT/modules/$script" "${CONFIG_PROFILE:-aptwannabe}"
+                        "$VMW_ROOT/modules/$script" "${CONFIG_PROFILE:-vmud}"
                     else
                         fmtr::warn "This module isn't ready yet."
                     fi
@@ -163,8 +163,8 @@ main_menu() {
 cmd="${1:-menu}"
 case "$cmd" in
     menu|"") main_menu ;;
-    plan) shift; cmd_plan "${1:-aptwannabe}" ;;
-    setup) shift; cmd_setup "${1:-aptwannabe}" ;;
+    plan) shift; cmd_plan "${1:-vmud}" ;;
+    setup) shift; cmd_setup "${1:-vmud}" ;;
     deploy) shift; cmd_deploy "$@" ;;
     patch-status) cmd_patch_status ;;
     status) cmd_status ;;

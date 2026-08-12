@@ -5,7 +5,7 @@
 # =============================================================================
 # VMW deploy: generate libvirt domain XML from a YAML profile and define it.
 #
-#   deploy.sh <profile>          # e.g. deploy.sh aptwannabe
+#   deploy.sh <profile>          # e.g. deploy.sh vmud
 #   deploy.sh --dry-run <profile># print the XML without defining
 #   deploy.sh --print <profile>  # write XML to configs/<profile>.xml (gitignored)
 #
