@@ -5,4 +5,5 @@ config.xml
 configs/*.xml
 .vmw/
 __pycache__/
+**/__pycache__/
 *.pyc

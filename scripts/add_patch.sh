@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-source "$(dirname "$0")/../utils.sh" >/dev/null 2>&1 || true
+VMW_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 patch_path="${1:?usage: add_patch.sh <patch-path> [<target-version>]}"
 version="${2:-}"
@@ -18,8 +18,7 @@ version="${2:-}"
 [[ -f "$patch_path" ]] || { echo "error: no such patch: $patch_path" >&2; exit 1; }
 
 # Normalize path relative to repo root
-repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-patch_path="$(realpath --relative-to="$repo_root" "$patch_path")"
+patch_path="$(realpath --relative-to="$VMW_ROOT" "$patch_path")"
 
 # Infer version from filename if not given
 if [[ -z $version ]]; then
@@ -49,5 +48,5 @@ else
     echo "Patch already has a '# Source:' header: $(grep -m1 '^# Source:' "$patch_path")"
 fi
 
-python3 "$repo_root/scripts/vmw_patches.py" gen
+PYTHONPATH="$VMW_ROOT/python" python3 -m vmw.patches gen
 echo "Updated checksums."

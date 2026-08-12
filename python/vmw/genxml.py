@@ -1,16 +1,10 @@
-#!/usr/bin/env python3
 """Generate a libvirt domain XML from a VMW YAML profile.
 
-Reads configs/<profile>.yml and emits a libvirt domain XML to stdout
-(or a file with --output). Replaces the fragile string-building in
-modules/deploy.sh.
-
 Usage:
-  generate_xml.py <profile> [--output <file>] [--domain-name <name>]
+  python3 -m vmw.genxml <profile> [--output <file>] [--domain-name <name>]
 
-The XML mirrors what modules/deploy.sh built via virt-install, but as a
-deterministic document. It is NOT a full replacement for virt-install's
-installer flow (boot order, cdrom) — it emits the resulting domain XML.
+Reads $VMW_ROOT/configs/<profile>.yml and emits a schema-valid libvirt
+domain XML. Replaces the fragile string-building in modules/deploy.sh.
 """
 import argparse
 import os
@@ -28,25 +22,24 @@ except ImportError:
     sys.stderr.write("error: lxml required (pip install lxml)\n")
     sys.exit(1)
 
-CONFIGS_DIR = "configs"
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CONFIGS_DIR = os.path.join(ROOT, "configs")
+
 DEFAULT_LOADER = "/opt/AutoVirt/firmware/OVMF_CODE.fd"
 DEFAULT_NVRAM = "/opt/AutoVirt/firmware/OVMF_VARS.fd"
 DEFAULT_EMULATOR = "/opt/AutoVirt/emulator/bin/qemu-system-x86_64"
-
-
 QEMU_NS = "http://libvirt.org/schemas/domain/qemu/1.0"
+
+
+def bool_str(value):
+    """Map python/YAML booleans to libvirt on/off strings."""
+    if isinstance(value, bool):
+        return "on" if value else "off"
+    return value
 
 
 def e(parent, tag, **attrs):
     el = etree.SubElement(parent, tag)
-    for key, value in attrs.items():
-        if value is not None:
-            el.set(key, str(bool_str(value)))
-    return el
-
-
-def qemu_el(parent, tag, **attrs):
-    el = etree.SubElement(parent, f"{{{QEMU_NS}}}{tag}")
     for key, value in attrs.items():
         if value is not None:
             el.set(key, str(bool_str(value)))
@@ -59,14 +52,15 @@ def text(parent, tag, value, **attrs):
     return el
 
 
-def bool_str(value):
-    """Map python/YAML booleans to libvirt on/off strings."""
-    if isinstance(value, bool):
-        return "on" if value else "off"
-    return value
-
-
 def s(el, **attrs):
+    for key, value in attrs.items():
+        if value is not None:
+            el.set(key, str(bool_str(value)))
+    return el
+
+
+def qemu_el(parent, tag, **attrs):
+    el = etree.SubElement(parent, f"{{{QEMU_NS}}}{tag}")
     for key, value in attrs.items():
         if value is not None:
             el.set(key, str(bool_str(value)))
@@ -103,7 +97,7 @@ def build_xml(cfg, domain_name=None):
     e(cpu, "cache", mode=cfg.get("cpu", {}).get("cache", "passthrough"))
     e(cpu, "maxphysaddr", mode=cfg.get("cpu", {}).get("maxphysaddr", "passthrough"))
     s(cpu, check=cfg.get("cpu", {}).get("check", "none"),
-      migratable=cfg.get("cpu", {}).get("migratable", "off"))    # CPU features (from old deploy.sh: svm/vmx, topoext, invtsc, hypervisor, ssbd...)
+      migratable=cfg.get("cpu", {}).get("migratable", "off"))
     feats = cfg.get("cpu", {}).get("features", {})
     for name, policy in feats.items():
         e(cpu, "feature", name=name, policy=policy)
@@ -234,12 +228,12 @@ def build_xml(cfg, domain_name=None):
     return root
 
 
-def main():
+def run(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("profile", help="configs/<profile>.yml (without .yml)")
     parser.add_argument("--output", "-o", help="write XML to this file")
     parser.add_argument("--domain-name", help="override domain name")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     cfg_path = os.path.join(CONFIGS_DIR, f"{args.profile}.yml")
     try:
@@ -247,7 +241,7 @@ def main():
             cfg = yaml.safe_load(handle) or {}
     except OSError as exc:
         sys.stderr.write(f"error: cannot read {cfg_path}: {exc}\n")
-        sys.exit(1)
+        return 1
 
     xml = etree.tostring(
         build_xml(cfg, domain_name=args.domain_name),
@@ -265,4 +259,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(sys.argv[1:]))

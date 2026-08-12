@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 
-source ./utils.sh || { echo "Failed to load utilities module!"; exit 1; }
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/init.sh"
 
-
-
-
-
-readonly ROOT_DIR="$(pwd)"
+readonly ROOT_DIR="$VMW_ROOT"
 readonly OUT_DIR="/opt/AutoVirt"
 
 readonly QEMU_URI="https://github.com/qemu/qemu.git"
 readonly QEMU_TAG="v11.0.3"
 
-readonly QEMU_PATCH="$(pwd)/patches/QEMU/${CPU_MANUFACTURER}-${QEMU_TAG}.patch"
+readonly QEMU_PATCH="$VMW_ROOT/patches/QEMU/${CPU_MANUFACTURER}-${QEMU_TAG}.patch"
 
 
 
@@ -123,14 +119,7 @@ patch_qemu() {
   [ -f "$QEMU_PATCH" ] || { fmtr::error "Missing '$QEMU_PATCH' patch file!"; return 1; }
 
   # Verify patch integrity before applying
-  local expected_ver
-  expected_ver="$(python3 "$(pwd)/scripts/vmw_patches.py" version "$QEMU_PATCH")"
-  if [[ -n "$expected_ver" && "$expected_ver" != "$QEMU_TAG" ]]; then
-    fmtr::warn "Patch '$QEMU_PATCH' targets $expected_ver but QEMU source is $QEMU_TAG — drift detected."
-    if ! prmt::yes_or_no "$(fmtr::ask_inline "Apply anyway?")"; then
-      return 1
-    fi
-  fi
+  vmw::check_patch_drift "$QEMU_PATCH" "$QEMU_TAG" "QEMU source" || return 1
 
   git apply < "$QEMU_PATCH" &>>"$LOG_FILE" || { fmtr::error "Failed to apply '$QEMU_PATCH'!"; return 1; }
   fmtr::log "Applied '${CPU_MANUFACTURER}-${QEMU_TAG}.patch' successfully."

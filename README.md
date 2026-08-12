@@ -29,19 +29,42 @@ Or run the interactive menu:
 ## CLI
 
 ```
-./main.sh                     Interactive menu
-./main.sh plan <profile>      Dry-run all modules (print commands)
-./main.sh setup <profile>     Run the full automated setup
-./main.sh deploy <profile>    Generate + define the domain XML
-./main.sh patch-status        Verify patch integrity + target versions
-./main.sh status              Show VMs and profile state
+vmw                          Interactive menu
+vmw plan <profile>           Dry-run all modules (print commands)
+vmw setup <profile>          Run the full automated setup
+vmw deploy <profile>         Generate + define the domain XML
+vmw patch-status             Verify patch integrity + target versions
+vmw status                   Show VMs and profile state
+vmw help                     Show this help
 ```
+
+`./main.sh` is a thin wrapper around `bin/vmw`.
 
 ## Configuration
 
 Each VM is described by a declarative YAML profile in `configs/` (e.g. `configs/aptwannabe.yml`). Values in the profile replace interactive prompts; omit a value to fall back to the prompt in menu mode.
 
-Domain XML is generated deterministically from the profile by `resources/generate_xml.py` and schema-validated before `virsh define`. See `PLAN.md` for the full architecture and phase-by-phase breakdown.
+Domain XML is generated deterministically from the profile by `python/vmw/genxml.py` and schema-validated before `virsh define`. See `docs/PLAN.md` for the full architecture and phase-by-phase breakdown.
+
+## Project layout
+
+```
+vmw/
+├── bin/vmw            CLI entrypoint (menu + subcommands)
+├── lib/               shared bash libraries (colors, log, prompt, config,
+│                      state, run, packages, patches) — loaded via lib/init.sh
+├── modules/           per-feature scripts (virtualization, qemu, edk2,
+│                      vfio, kernel, lg, deploy)
+├── python/vmw/        Python tooling package (yaml, state, patches, genxml)
+├── configs/           per-VM YAML profiles
+├── patches/           versioned patch artifacts + checksums.sha256
+├── resources/         helper scripts (SMBIOS, vbios dumpers, ...)
+├── scripts/           dev workflows (add_patch.sh)
+├── docs/              design docs
+├── .vmw/              local state (gitignored)
+├── logs/              runtime logs (gitignored)
+└── src/               build artifacts (gitignored)
+```
 
 ## Patches
 
@@ -49,7 +72,7 @@ Patches are versioned artifacts under `patches/`, verified by SHA256 checksums a
 
 ```sh
 scripts/add_patch.sh patches/QEMU/AMD-v11.0.4.patch v11.0.4
-./main.sh patch-status
+vmw patch-status
 ```
 
 ## Prerequisites

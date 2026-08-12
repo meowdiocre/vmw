@@ -1,23 +1,23 @@
-#!/usr/bin/env python3
 """State manifest manager for VMW.
 
 Stores completed steps per module in .vmw/state.json so re-runs can
 skip done work and resume mid-build.
 
 Usage:
-  vmw_state.py get [<key>]
-  vmw_state.py set <key> <value>
-  vmw_state.py has <key>           # exit 0 if key is set & truthy
-  vmw_state.py done <module> <step> # mark a step complete
-  vmw_state.py pending <module> <step> # remove a step
-  vmw_state.py list [<module>]
-  vmw_state.py reset [<module>]
+  python3 -m vmw.state get [<key>]
+  python3 -m vmw.state set <key> <value>
+  python3 -m vmw.state has <key>           # exit 0 if key is set & truthy
+  python3 -m vmw.state done <module> <step> # mark a step complete
+  python3 -m vmw.state pending <module> <step> # remove a step
+  python3 -m vmw.state list [<module>]
+  python3 -m vmw.state reset [<module>]
 """
 import json
 import os
 import sys
 
-STATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".vmw")
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+STATE_DIR = os.path.join(ROOT, ".vmw")
 STATE_FILE = os.path.join(STATE_DIR, "state.json")
 
 
@@ -38,10 +38,10 @@ def save(state):
         handle.write("\n")
 
 
-def main():
-    args = sys.argv[1:]
+def run(argv):
+    args = argv
     if not args:
-        print(__doc__, file=sys.stderr)
+        sys.stderr.write(__doc__ + "\n")
         return 2
     cmd = args[0]
     state = load()
@@ -93,10 +93,10 @@ def main():
             state = {"modules": {}, "values": {}}
         save(state)
     else:
-        print(f"unknown command: {cmd}", file=sys.stderr)
+        sys.stderr.write(f"unknown command: {cmd}\n")
         return 2
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run(sys.argv[1:]))

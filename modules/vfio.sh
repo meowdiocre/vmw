@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source ./utils.sh || { echo "Failed to load utilities module!"; exit 1; }
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/init.sh"
 
 
 

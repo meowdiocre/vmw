@@ -1,5 +1,5 @@
 # VMW patch checksums
-# Regenerate with: scripts/vmw_patches.py gen
+# Regenerate with: python3 -m vmw.patches gen
 c0d08594c5117883ec90f6de91f7644e09329b55914716899247192443b6c523  EDK2/AMD-edk2-stable202605.patch
 14d63beaaa4ceb3341fa7c13256048b8997740919e24858c34355530dcb30403  EDK2/Archive/AMD-edk2-stable202511.patch
 94d5b14058240cd6a9a222d9e17385858422fadd1647d3b71fa0abc0f34bac28  EDK2/Archive/AMD-edk2-stable202602.patch

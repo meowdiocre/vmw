@@ -1,12 +1,8 @@
 #!/usr/bin/env bash
 
-source ./utils.sh || { echo "Failed to load utilities module!"; exit 1; }
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/init.sh"
 
-
-
-
-
-readonly SRC_DIR="$(pwd)/src"
+readonly SRC_DIR="$VMW_ROOT/src"
 
 readonly TKG_URI="https://github.com/Frogging-Family/linux-tkg.git"
 readonly TKG_DIR="linux-tkg"
@@ -205,12 +201,12 @@ patch_kernel_files() {
     fi
 
     local user_patch_dir="linux-tkg-userpatches"
-    local source_patch="../../patches/Kernel/$patch_name"
+    local source_patch="$VMW_ROOT/patches/Kernel/$patch_name"
 
     if [[ -n "$patch_name" && -f "$source_patch" ]]; then
         # Verify patch integrity before staging
         local expected_ver
-        expected_ver="$(python3 "$(pwd)/scripts/vmw_patches.py" version "$source_patch")"
+        expected_ver="$(vmw::patch_version "$source_patch")"
         if [[ -n "$expected_ver" ]]; then
             local kernel_ver="${KERNEL_MAJOR}${KERNEL_MINOR}"
             if [[ "$expected_ver" != *"$kernel_ver"* && "$kernel_ver" != *"$expected_ver"* ]]; then

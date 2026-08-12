@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source ./utils.sh || { echo "Failed to load utilities module!"; exit 1; }
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/init.sh"
 
 # =============================================================================
 # VMW deploy: generate libvirt domain XML from a YAML profile and define it.
@@ -42,24 +42,23 @@ if ! vmw::load_config "$PROFILE"; then
     exit 1
 fi
 
-GEN_PY="$(pwd)/resources/generate_xml.py"
-OUT_XML="$(pwd)/configs/${PROFILE}.xml"
+OUT_XML="$VMW_ROOT/configs/${PROFILE}.xml"
 
 fmtr::info "Generating domain XML for profile '$PROFILE'..."
 
 if [[ -n $PRINT ]]; then
-    python3 "$GEN_PY" "$PROFILE" --output "$OUT_XML" || exit 1
+    vmw::py genxml "$PROFILE" --output "$OUT_XML" || exit 1
     fmtr::info "Wrote XML to $OUT_XML"
     exit 0
 fi
 
 if [[ -n $DRY ]]; then
-    python3 "$GEN_PY" "$PROFILE" || exit 1
+    vmw::py genxml "$PROFILE" || exit 1
     exit 0
 fi
 
 # Generate to the output file (in configs/, gitignored)
-python3 "$GEN_PY" "$PROFILE" --output "$OUT_XML" || exit 1
+vmw::py genxml "$PROFILE" --output "$OUT_XML" || exit 1
 
 # Schema validation via virt-xml-validate (if present)
 if command -v virt-xml-validate >/dev/null 2>&1; then

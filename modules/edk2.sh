@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 
-source ./utils.sh || { echo "Failed to load utilities module!"; exit 1; }
+. "$(dirname "${BASH_SOURCE[0]}")/../lib/init.sh"
 
-
-
-
-
-readonly SRC_DIR="$(pwd)/src"
+readonly SRC_DIR="$VMW_ROOT/src"
 readonly OUT_DIR="/opt/AutoVirt"
 
 readonly EDK2_URI="https://github.com/tianocore/edk2.git"
 readonly EDK2_TAG="edk2-stable202605"
 
-readonly OVMF_PATCH="$(pwd)/patches/EDK2/${CPU_MANUFACTURER}-${EDK2_TAG}.patch"
+readonly OVMF_PATCH="$VMW_ROOT/patches/EDK2/${CPU_MANUFACTURER}-${EDK2_TAG}.patch"
 
 
 
@@ -116,14 +112,7 @@ patch_ovmf() {
   [ -f "$OVMF_PATCH" ] || { fmtr::error "Patch file missing"; return 1; }
 
   # Verify patch integrity before applying
-  local expected_ver
-  expected_ver="$(python3 "$(pwd)/scripts/vmw_patches.py" version "$OVMF_PATCH")"
-  if [[ -n "$expected_ver" && "$expected_ver" != "$EDK2_TAG" ]]; then
-    fmtr::warn "Patch '$OVMF_PATCH' targets $expected_ver but EDK2 source is $EDK2_TAG — drift detected."
-    if ! prmt::yes_or_no "$(fmtr::ask_inline "Apply anyway?")"; then
-      return 1
-    fi
-  fi
+  vmw::check_patch_drift "$OVMF_PATCH" "$EDK2_TAG" "EDK2 source" || return 1
 
   git apply < "$OVMF_PATCH" &>>"$LOG_FILE" || {
     fmtr::error "Patch application failed"; return 1;
