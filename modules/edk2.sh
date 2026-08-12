@@ -3,7 +3,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/init.sh"
 
 readonly SRC_DIR="$VMW_ROOT/src"
-readonly OUT_DIR="/opt/AutoVirt"
+readonly OUT_DIR="/opt/vmw"
 
 readonly EDK2_URI="https://github.com/tianocore/edk2.git"
 readonly EDK2_TAG="edk2-stable202605"

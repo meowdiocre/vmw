@@ -25,9 +25,9 @@ except ImportError:
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CONFIGS_DIR = os.path.join(ROOT, "configs")
 
-DEFAULT_LOADER = "/opt/AutoVirt/firmware/OVMF_CODE.fd"
-DEFAULT_NVRAM = "/opt/AutoVirt/firmware/OVMF_VARS.fd"
-DEFAULT_EMULATOR = "/opt/AutoVirt/emulator/bin/qemu-system-x86_64"
+DEFAULT_LOADER = "/opt/vmw/firmware/OVMF_CODE.fd"
+DEFAULT_NVRAM = "/opt/vmw/firmware/OVMF_VARS.fd"
+DEFAULT_EMULATOR = "/opt/vmw/emulator/bin/qemu-system-x86_64"
 QEMU_NS = "http://libvirt.org/schemas/domain/qemu/1.0"
 
 

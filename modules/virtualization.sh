@@ -63,10 +63,10 @@ configure_system_installation() {
   HYBRID_MAC="$OUI:$TAIL"
 
   # Define libvirt network if missing
-  if ! $ROOT_ESC virsh net-info AutoVirt-Router &>> "$LOG_FILE"; then
+  if ! $ROOT_ESC virsh net-info vmw-Router &>> "$LOG_FILE"; then
       $ROOT_ESC virsh net-define /dev/stdin &>> "$LOG_FILE" <<EOF
   <network>
-    <name>AutoVirt-Router</name>
+    <name>vmw-Router</name>
     <forward mode="nat"/>
     <mac address="$HYBRID_MAC"/>
     <ip address="10.0.0.1" netmask="255.255.255.0">
@@ -76,11 +76,11 @@ configure_system_installation() {
     </ip>
   </network>
 EOF
-      $ROOT_ESC virsh net-autostart AutoVirt-Router &>> "$LOG_FILE"
-      $ROOT_ESC virsh net-start AutoVirt-Router &>> "$LOG_FILE"
-      fmtr::info "AutoVirt-Router network created and started."
+      $ROOT_ESC virsh net-autostart vmw-Router &>> "$LOG_FILE"
+      $ROOT_ESC virsh net-start vmw-Router &>> "$LOG_FILE"
+      fmtr::info "vmw-Router network created and started."
   else
-      fmtr::info "'AutoVirt-Router' network already exists. *skipping*"
+      fmtr::info "'vmw-Router' network already exists. *skipping*"
   fi
 
   # Enable VMM XML editor (GTK Application)

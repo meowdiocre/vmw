@@ -24,9 +24,9 @@ cpu:
 boot:
   order: "cdrom,hd"
   menu: "on"
-  loader: /opt/AutoVirt/firmware/OVMF_CODE.fd
+  loader: /opt/vmw/firmware/OVMF_CODE.fd
   loader_secure: "yes"
-  nvram_template: /opt/AutoVirt/firmware/OVMF_VARS.fd
+  nvram_template: /opt/vmw/firmware/OVMF_VARS.fd
 
 features:
   hyperv: true
@@ -58,7 +58,7 @@ pm:
   suspend_to_disk: "yes"
 
 device:
-  emulator: /opt/AutoVirt/emulator/bin/qemu-system-x86_64
+  emulator: /opt/vmw/emulator/bin/qemu-system-x86_64
   disk_size_gb: 500
   disk_bus: nvme
   disk_cache: none
@@ -84,7 +84,7 @@ patches:
   edk2: AMD-edk2-stable202605.patch
 
 smbios:
-  file: /opt/AutoVirt/firmware/smbios.bin
+  file: /opt/vmw/firmware/smbios.bin
 
 evdev:
   enabled: true

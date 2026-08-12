@@ -3,7 +3,7 @@
 . "$(dirname "${BASH_SOURCE[0]}")/../lib/init.sh"
 
 readonly ROOT_DIR="$VMW_ROOT"
-readonly OUT_DIR="/opt/AutoVirt"
+readonly OUT_DIR="/opt/vmw"
 
 readonly QEMU_URI="https://github.com/qemu/qemu.git"
 readonly QEMU_TAG="v11.0.3"
