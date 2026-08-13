@@ -15,18 +15,19 @@ index 8137927e7..5aae3d1c5 100644
  		/* KVM only supports up to 0x7.2, capped above via min(). */
  		if (max_idx >= 1) {
 diff --git a/arch/x86/kvm/svm/svm.c b/arch/x86/kvm/svm/svm.c
-index e6477affa..472ef6e43 100644
+index e6477affa..7bf708f43 100644
 --- a/arch/x86/kvm/svm/svm.c
 +++ b/arch/x86/kvm/svm/svm.c
-@@ -819,6 +819,24 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
+@@ -819,6 +819,25 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
  		svm_disable_intercept_for_msr(vcpu, MSR_IA32_MPERF, MSR_TYPE_R);
  	}
  
 +	// Let the guest read P-state MSRs directly.
 +	// MSR_AMD_PERF_CTL=0xC0010062, MSR_AMD_PERF_STATUS=0xC0010063,
 +	// MSR_AMD_PSTATE_DEF_BASE=0xC0010064 (+0..7).
-+	svm_disable_intercept_for_msr(vcpu, 0xc0010062, MSR_TYPE_RW);
-+	svm_disable_intercept_for_msr(vcpu, 0xc0010063, MSR_TYPE_RW);
++	// Read-only: the guest reads P-state values but must not write them.
++	svm_disable_intercept_for_msr(vcpu, 0xc0010062, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc0010063, MSR_TYPE_R);
 +	svm_disable_intercept_for_msr(vcpu, 0xc0010064, MSR_TYPE_R);
 +	svm_disable_intercept_for_msr(vcpu, 0xc0010065, MSR_TYPE_R);
 +	svm_disable_intercept_for_msr(vcpu, 0xc0010066, MSR_TYPE_R);
@@ -43,7 +44,7 @@ index e6477affa..472ef6e43 100644
  	if (kvm_cpu_cap_has(X86_FEATURE_SHSTK)) {
  		bool shstk_enabled = guest_cpu_cap_has(vcpu, X86_FEATURE_SHSTK);
  
-@@ -1101,27 +1119,35 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
+@@ -1101,27 +1120,35 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
  	if (intercept_smi)
  		svm_set_intercept(svm, INTERCEPT_SMI);
  
@@ -92,7 +93,7 @@ index e6477affa..472ef6e43 100644
  
  	if (!kvm_mwait_in_guest(vcpu->kvm)) {
  		svm_set_intercept(svm, INTERCEPT_MONITOR);
-@@ -2386,6 +2412,15 @@ static int skinit_interception(struct kvm_vcpu *vcpu)
+@@ -2386,6 +2413,15 @@ static int skinit_interception(struct kvm_vcpu *vcpu)
  	return 1;
  }
  
@@ -108,7 +109,7 @@ index e6477affa..472ef6e43 100644
  static int task_switch_interception(struct kvm_vcpu *vcpu)
  {
  	struct vcpu_svm *svm = to_svm(vcpu);
-@@ -3279,7 +3314,7 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
+@@ -3279,7 +3315,7 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
  	[SVM_EXIT_TASK_SWITCH]			= task_switch_interception,
  	[SVM_EXIT_SHUTDOWN]			= shutdown_interception,
  	[SVM_EXIT_VMRUN]			= vmrun_interception,
@@ -117,7 +118,7 @@ index e6477affa..472ef6e43 100644
  	[SVM_EXIT_VMLOAD]			= vmload_interception,
  	[SVM_EXIT_VMSAVE]			= vmsave_interception,
  	[SVM_EXIT_STGI]				= stgi_interception,
-@@ -5092,6 +5127,10 @@ static int svm_vm_init(struct kvm *kvm)
+@@ -5092,6 +5128,10 @@ static int svm_vm_init(struct kvm *kvm)
  {
  	int type = kvm->arch.vm_type;
  
@@ -129,7 +130,7 @@ index e6477affa..472ef6e43 100644
  	    type != KVM_X86_SW_PROTECTED_VM) {
  		kvm->arch.has_protected_state =
 diff --git a/arch/x86/kvm/x86.c b/arch/x86/kvm/x86.c
-index fd1c4a36b..b0371dd78 100644
+index fd1c4a36b..77d96a6a9 100644
 --- a/arch/x86/kvm/x86.c
 +++ b/arch/x86/kvm/x86.c
 @@ -3567,9 +3567,6 @@ static int set_msr_mce(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
@@ -164,7 +165,18 @@ index fd1c4a36b..b0371dd78 100644
  
  		if (data & ~vcpu->arch.guest_supported_xss)
  			return 1;
-@@ -4318,8 +4315,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
+@@ -4224,6 +4221,10 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+ 		 * the need to ignore the workaround.
+ 		 */
+ 		break;
++	/* Accept P-state writes silently. The guest reads these values
++	 * natively; writes carry no security effect. */
++	case 0xc0010062 ... 0xc001006b:
++		break;
+ #ifdef CONFIG_KVM_HYPERV
+ 	case HV_X64_MSR_GUEST_OS_ID ... HV_X64_MSR_SINT15:
+ 	case HV_X64_MSR_SYNDBG_CONTROL ... HV_X64_MSR_SYNDBG_PENDING_BUFFER:
+@@ -4318,8 +4319,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
  		data = vcpu->arch.mcg_cap;
  		break;
  	case MSR_IA32_MCG_CTL:
@@ -173,7 +185,7 @@ index fd1c4a36b..b0371dd78 100644
  		data = vcpu->arch.mcg_ctl;
  		break;
  	case MSR_IA32_MCG_STATUS:
-@@ -4330,8 +4325,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
+@@ -4330,8 +4329,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
  		if (msr > last_msr)
  			return 1;
  
@@ -182,7 +194,7 @@ index fd1c4a36b..b0371dd78 100644
  		offset = array_index_nospec(msr - MSR_IA32_MC0_CTL2,
  					    last_msr + 1 - MSR_IA32_MC0_CTL2);
  		data = vcpu->arch.mci_ctl2_banks[offset];
-@@ -4558,9 +4551,11 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+@@ -4558,9 +4555,11 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
  		return get_msr_mce(vcpu, msr_info->index, &msr_info->data,
  				   msr_info->host_initiated);
  	case MSR_IA32_XSS:
@@ -197,3 +209,25 @@ index fd1c4a36b..b0371dd78 100644
  		msr_info->data = vcpu->arch.ia32_xss;
  		break;
  	case MSR_K7_CLK_CTL:
+@@ -4571,10 +4570,19 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+ 		 *
+ 		 * This prevents guest kernels on AMD host with CPU
+ 		 * type 6, model 8 and higher from exploding due to
+-		 * the rdmsr failing.
+-		 */
++		 * the rdmsr failing.		 */
+ 		msr_info->data = 0x20000000;
+ 		break;
++	/* Read P-state and CPPC values from host hardware. */
++	case 0xc0010062 ... 0xc001006b:
++	case 0xc0010293:
++	case 0xc001029a: {
++		u32 lo, hi;
++		if (rdmsr_safe(msr_info->index, &lo, &hi))
++			return 1;
++		msr_info->data = ((u64)hi << 32) | lo;
++		break;
++	}
+ #ifdef CONFIG_KVM_HYPERV
+ 	case HV_X64_MSR_GUEST_OS_ID ... HV_X64_MSR_SINT15:
+ 	case HV_X64_MSR_SYNDBG_CONTROL ... HV_X64_MSR_SYNDBG_PENDING_BUFFER:
