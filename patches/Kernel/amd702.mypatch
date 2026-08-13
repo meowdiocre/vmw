@@ -1,3 +1,7 @@
+# Source: 7.0
+# Applied by: VMW
+# (checksum tracked in patches/checksums.sha256)
+
 diff --git a/arch/x86/kvm/cpuid.c b/arch/x86/kvm/cpuid.c
 index 8137927e7..5aae3d1c5 100644
 --- a/arch/x86/kvm/cpuid.c
@@ -11,13 +15,27 @@ index 8137927e7..5aae3d1c5 100644
  		/* KVM only supports up to 0x7.2, capped above via min(). */
  		if (max_idx >= 1) {
 diff --git a/arch/x86/kvm/svm/svm.c b/arch/x86/kvm/svm/svm.c
-index e6477affa..cf41669a0 100644
+index e6477affa..472ef6e43 100644
 --- a/arch/x86/kvm/svm/svm.c
 +++ b/arch/x86/kvm/svm/svm.c
-@@ -819,6 +819,10 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
+@@ -819,6 +819,24 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
  		svm_disable_intercept_for_msr(vcpu, MSR_IA32_MPERF, MSR_TYPE_R);
  	}
  
++	// Let the guest read P-state MSRs directly.
++	// MSR_AMD_PERF_CTL=0xC0010062, MSR_AMD_PERF_STATUS=0xC0010063,
++	// MSR_AMD_PSTATE_DEF_BASE=0xC0010064 (+0..7).
++	svm_disable_intercept_for_msr(vcpu, 0xc0010062, MSR_TYPE_RW);
++	svm_disable_intercept_for_msr(vcpu, 0xc0010063, MSR_TYPE_RW);
++	svm_disable_intercept_for_msr(vcpu, 0xc0010064, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc0010065, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc0010066, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc0010067, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc0010068, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc0010069, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc001006a, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc001006b, MSR_TYPE_R);
++
 +	// Allow the guest to read TSC natively, so timing checks do not see
 +	// the VM-exit latency a normally intercepted read would reveal.
 +	svm_disable_intercept_for_msr(vcpu, MSR_IA32_TSC, MSR_TYPE_R);
@@ -25,24 +43,64 @@ index e6477affa..cf41669a0 100644
  	if (kvm_cpu_cap_has(X86_FEATURE_SHSTK)) {
  		bool shstk_enabled = guest_cpu_cap_has(vcpu, X86_FEATURE_SHSTK);
  
-@@ -1122,6 +1126,9 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
+@@ -1101,27 +1119,35 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
+ 	if (intercept_smi)
+ 		svm_set_intercept(svm, INTERCEPT_SMI);
+ 
++	/*
++	 * Run privileged guest instructions natively instead of emulating
++	 * them in the hypervisor. The guest executes real hardware
++	 * instructions, so timing checks and instruction behavior match a
++	 * bare-metal machine.
++	 */
+ 	svm_set_intercept(svm, INTERCEPT_SELECTIVE_CR0);
+-	svm_set_intercept(svm, INTERCEPT_RDPMC);
+-	svm_set_intercept(svm, INTERCEPT_CPUID);
+-	svm_set_intercept(svm, INTERCEPT_INVD);
++	svm_clr_intercept(svm, INTERCEPT_RDPMC);		/* native PMU */
++	svm_clr_intercept(svm, INTERCEPT_CPUID);		/* native CPUID */
++	svm_clr_intercept(svm, INTERCEPT_INVD);		/* native INVD */
+ 	svm_set_intercept(svm, INTERCEPT_INVLPG);
+-	svm_set_intercept(svm, INTERCEPT_INVLPGA);
++	svm_clr_intercept(svm, INTERCEPT_INVLPGA);		/* native INVLPGA */
+ 	svm_set_intercept(svm, INTERCEPT_IOIO_PROT);
+ 	svm_set_intercept(svm, INTERCEPT_MSR_PROT);
+-	svm_set_intercept(svm, INTERCEPT_TASK_SWITCH);
++	svm_clr_intercept(svm, INTERCEPT_TASK_SWITCH);		/* native TASK_SWITCH */
+ 	svm_set_intercept(svm, INTERCEPT_SHUTDOWN);
+ 	svm_set_intercept(svm, INTERCEPT_VMRUN);
+-	svm_set_intercept(svm, INTERCEPT_VMMCALL);
+-	svm_set_intercept(svm, INTERCEPT_VMLOAD);
+-	svm_set_intercept(svm, INTERCEPT_VMSAVE);
+-	svm_set_intercept(svm, INTERCEPT_STGI);
+-	svm_set_intercept(svm, INTERCEPT_CLGI);
+-	svm_set_intercept(svm, INTERCEPT_SKINIT);
+-	svm_set_intercept(svm, INTERCEPT_WBINVD);
++	svm_set_intercept(svm, INTERCEPT_VMMCALL);		/* handled by vmmcall_interception */
++	svm_clr_intercept(svm, INTERCEPT_VMLOAD);		/* native VMLOAD */
++	svm_clr_intercept(svm, INTERCEPT_VMSAVE);		/* native VMSAVE */
++	svm_clr_intercept(svm, INTERCEPT_STGI);			/* native STGI */
++	svm_clr_intercept(svm, INTERCEPT_CLGI);			/* native CLGI */
++	svm_clr_intercept(svm, INTERCEPT_SKINIT);		/* native SKINIT */
++	svm_clr_intercept(svm, INTERCEPT_WBINVD);		/* native WBINVD */
  	svm_set_intercept(svm, INTERCEPT_XSETBV);
- 	svm_set_intercept(svm, INTERCEPT_RDPRU);
+-	svm_set_intercept(svm, INTERCEPT_RDPRU);
++	svm_clr_intercept(svm, INTERCEPT_RDPRU);
  	svm_set_intercept(svm, INTERCEPT_RSM);
-+	svm_clr_intercept(svm, INTERCEPT_RDTSC);	// Run RDTSC natively.
-+	svm_clr_intercept(svm, INTERCEPT_RDTSCP);	// Run RDTSCP natively.
-+	svm_clr_intercept(svm, INTERCEPT_CPUID);	// Native CPUID; firmware reads APIC ID from the LAPIC register.
++	svm_clr_intercept(svm, INTERCEPT_RDTSC);		/* native RDTSC */
++	svm_clr_intercept(svm, INTERCEPT_RDTSCP);		/* native RDTSCP */
  
  	if (!kvm_mwait_in_guest(vcpu->kvm)) {
  		svm_set_intercept(svm, INTERCEPT_MONITOR);
-@@ -2386,6 +2393,14 @@ static int skinit_interception(struct kvm_vcpu *vcpu)
+@@ -2386,6 +2412,15 @@ static int skinit_interception(struct kvm_vcpu *vcpu)
  	return 1;
  }
  
 +static int vmmcall_interception(struct kvm_vcpu *vcpu)
 +{
-+	// Deliver a #UD to the guest on VMMCALL, hiding the hypercall path
-+	// from software that probes for KVM patching behavior.
++	// Skip the VMMCALL, then raise #UD so the guest faults instead of
++	// looping on the same instruction.
++	kvm_skip_emulated_instruction(vcpu);
 +	kvm_queue_exception(vcpu, UD_VECTOR);
 +	return 1;
 +}
@@ -50,7 +108,7 @@ index e6477affa..cf41669a0 100644
  static int task_switch_interception(struct kvm_vcpu *vcpu)
  {
  	struct vcpu_svm *svm = to_svm(vcpu);
-@@ -3279,7 +3294,7 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
+@@ -3279,7 +3314,7 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
  	[SVM_EXIT_TASK_SWITCH]			= task_switch_interception,
  	[SVM_EXIT_SHUTDOWN]			= shutdown_interception,
  	[SVM_EXIT_VMRUN]			= vmrun_interception,
@@ -59,3 +117,83 @@ index e6477affa..cf41669a0 100644
  	[SVM_EXIT_VMLOAD]			= vmload_interception,
  	[SVM_EXIT_VMSAVE]			= vmsave_interception,
  	[SVM_EXIT_STGI]				= stgi_interception,
+@@ -5092,6 +5127,10 @@ static int svm_vm_init(struct kvm *kvm)
+ {
+ 	int type = kvm->arch.vm_type;
+ 
++	// Do not patch hypercall instructions. Leave them unmodified so the
++	// guest faults instead of exposing the hypercall path.
++	kvm->arch.disabled_quirks |= KVM_X86_QUIRK_FIX_HYPERCALL_INSN;
++
+ 	if (type != KVM_X86_DEFAULT_VM &&
+ 	    type != KVM_X86_SW_PROTECTED_VM) {
+ 		kvm->arch.has_protected_state =
+diff --git a/arch/x86/kvm/x86.c b/arch/x86/kvm/x86.c
+index fd1c4a36b..b0371dd78 100644
+--- a/arch/x86/kvm/x86.c
++++ b/arch/x86/kvm/x86.c
+@@ -3567,9 +3567,6 @@ static int set_msr_mce(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+ 		vcpu->arch.mcg_status = data;
+ 		break;
+ 	case MSR_IA32_MCG_CTL:
+-		if (!(mcg_cap & MCG_CTL_P) &&
+-		    (data || !msr_info->host_initiated))
+-			return 1;
+ 		if (data != 0 && data != ~(u64)0)
+ 			return 1;
+ 		vcpu->arch.mcg_ctl = data;
+@@ -3579,8 +3576,6 @@ static int set_msr_mce(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+ 		if (msr > last_msr)
+ 			return 1;
+ 
+-		if (!(mcg_cap & MCG_CMCI_P) && (data || !msr_info->host_initiated))
+-			return 1;
+ 		/* An attempt to write a 1 to a reserved bit raises #GP */
+ 		if (data & ~(MCI_CTL2_CMCI_EN | MCI_CTL2_CMCI_THRESHOLD_MASK))
+ 			return 1;
+@@ -4093,8 +4088,10 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+ 		}
+ 		break;
+ 	case MSR_IA32_XSS:
+-		if (!guest_cpuid_has(vcpu, X86_FEATURE_XSAVES))
+-			return KVM_MSR_RET_UNSUPPORTED;
++		/* Allow XSS writes. Native CPUID reports XSAVES, so skip the
++		 * guest_cpuid_has gate that would reject the MSR.
++		 * if (!guest_cpuid_has(vcpu, X86_FEATURE_XSAVES))
++		 *	return KVM_MSR_RET_UNSUPPORTED; */
+ 
+ 		if (data & ~vcpu->arch.guest_supported_xss)
+ 			return 1;
+@@ -4318,8 +4315,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
+ 		data = vcpu->arch.mcg_cap;
+ 		break;
+ 	case MSR_IA32_MCG_CTL:
+-		if (!(mcg_cap & MCG_CTL_P) && !host)
+-			return 1;
+ 		data = vcpu->arch.mcg_ctl;
+ 		break;
+ 	case MSR_IA32_MCG_STATUS:
+@@ -4330,8 +4325,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
+ 		if (msr > last_msr)
+ 			return 1;
+ 
+-		if (!(mcg_cap & MCG_CMCI_P) && !host)
+-			return 1;
+ 		offset = array_index_nospec(msr - MSR_IA32_MC0_CTL2,
+ 					    last_msr + 1 - MSR_IA32_MC0_CTL2);
+ 		data = vcpu->arch.mci_ctl2_banks[offset];
+@@ -4558,9 +4551,11 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+ 		return get_msr_mce(vcpu, msr_info->index, &msr_info->data,
+ 				   msr_info->host_initiated);
+ 	case MSR_IA32_XSS:
+-		if (!msr_info->host_initiated &&
+-		    !guest_cpuid_has(vcpu, X86_FEATURE_XSAVES))
+-			return 1;
++		/* Allow XSS reads. Native CPUID reports XSAVES, so skip the
++		 * guest_cpuid_has gate that would reject the MSR.
++		 * if (!msr_info->host_initiated &&
++		 *    !guest_cpuid_has(vcpu, X86_FEATURE_XSAVES))
++		 *	return 1; */
+ 		msr_info->data = vcpu->arch.ia32_xss;
+ 		break;
+ 	case MSR_K7_CLK_CTL:
