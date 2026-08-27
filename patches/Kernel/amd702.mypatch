@@ -3,22 +3,89 @@
 # (checksum tracked in patches/checksums.sha256)
 
 diff --git a/arch/x86/kvm/cpuid.c b/arch/x86/kvm/cpuid.c
-index 8137927e7..5aae3d1c5 100644
+index 8137927e7..4bc57cbf1 100644
 --- a/arch/x86/kvm/cpuid.c
 +++ b/arch/x86/kvm/cpuid.c
-@@ -1479,6 +1479,7 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
+@@ -1479,6 +1479,8 @@ static inline int __do_cpuid_func(struct kvm_cpuid_array *array, u32 function)
  		cpuid_entry_override(entry, CPUID_7_0_EBX);
  		cpuid_entry_override(entry, CPUID_7_ECX);
  		cpuid_entry_override(entry, CPUID_7_EDX);
-+		entry->edx &= 0x73FFFFFF;  // Mask AMD-reserved hypervisor bits in leaf 7.
++		/* Mask AMD-reserved hypervisor bits in leaf 7. */
++		entry->edx &= 0x73FFFFFF;
  
  		/* KVM only supports up to 0x7.2, capped above via min(). */
  		if (max_idx >= 1) {
+diff --git a/arch/x86/kvm/emulate.c b/arch/x86/kvm/emulate.c
+index c8e292e9a..f7cbc4ba9 100644
+--- a/arch/x86/kvm/emulate.c
++++ b/arch/x86/kvm/emulate.c
+@@ -3967,7 +3967,7 @@ static const struct opcode ud = I(SrcNone, emulate_ud);
+ 
+ static const struct opcode group7_rm0[] = {
+ 	N,
+-	I(SrcNone | Priv | EmulateOnUD,	em_hypercall),
++	I(SrcNone | Priv,	em_hypercall),
+ 	N, N, N, N, N, N,
+ };
+ 
+@@ -3985,7 +3985,7 @@ static const struct opcode group7_rm2[] = {
+ 
+ static const struct opcode group7_rm3[] = {
+ 	DIP(SrcNone | Prot | Priv,		vmrun,		check_svme_pa),
+-	II(SrcNone  | Prot | EmulateOnUD,	em_hypercall,	vmmcall),
++	II(SrcNone  | Prot,	em_hypercall,	vmmcall),
+ 	DIP(SrcNone | Prot | Priv,		vmload,		check_svme_pa),
+ 	DIP(SrcNone | Prot | Priv,		vmsave,		check_svme_pa),
+ 	DIP(SrcNone | Prot | Priv,		stgi,		check_svme),
+diff --git a/arch/x86/kvm/hyperv.c b/arch/x86/kvm/hyperv.c
+index 9b140bbdc..88cc2f47a 100644
+--- a/arch/x86/kvm/hyperv.c
++++ b/arch/x86/kvm/hyperv.c
+@@ -932,8 +932,18 @@ int kvm_hv_get_assist_page(struct kvm_vcpu *vcpu)
+ 	if (!hv_vcpu || !kvm_hv_assist_page_enabled(vcpu))
+ 		return -EFAULT;
+ 
++	/*
++	 * Only the head of the VP assist page matters to KVM
++	 * (nested_control / enlighten_vmentry / current_nested_vmcs all
++	 * live in the first 56 bytes).  Reading the full 4k page on
++	 * every nested VMRUN is a measurable per-transition cost; the
++	 * tail is per-guest scratch data KVM never consumes.
++	 */
++	BUILD_BUG_ON(offsetofend(struct hv_vp_assist_page, current_nested_vmcs) != 56);
++
+ 	return kvm_read_guest_cached(vcpu->kvm, &vcpu->arch.pv_eoi.data,
+-				     &hv_vcpu->vp_assist_page, sizeof(struct hv_vp_assist_page));
++				     &hv_vcpu->vp_assist_page,
++				     offsetofend(struct hv_vp_assist_page, current_nested_vmcs));
+ }
+ EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_hv_get_assist_page);
+ 
+diff --git a/arch/x86/kvm/svm/nested.c b/arch/x86/kvm/svm/nested.c
+index b36c33255..d1827e105 100644
+--- a/arch/x86/kvm/svm/nested.c
++++ b/arch/x86/kvm/svm/nested.c
+@@ -1037,6 +1037,15 @@ int nested_svm_vmrun(struct kvm_vcpu *vcpu)
+ 	nested_copy_vmcb_control_to_cache(svm, &vmcb12->control);
+ 	nested_copy_vmcb_save_to_cache(svm, &vmcb12->save);
+ 
++	/*
++	 * If L2's previous exit was a Hyper-V CPUID probe and L1 is
++	 * resuming L2 right after that instruction, rewrite the
++	 * detection-visible bits of the answer (root partition,
++	 * "Microsoft Hv", not-nested).  Everything else stays what
++	 * hvix64 computed.
++	 */
++	svm_vmw_patch_l2_cpuid_answer(vcpu, vmcb12);
++
+ 	if (nested_svm_check_cached_vmcb12(vcpu) < 0) {
+ 		vmcb12->control.exit_code    = SVM_EXIT_ERR;
+ 		vmcb12->control.exit_info_1  = 0;
 diff --git a/arch/x86/kvm/svm/svm.c b/arch/x86/kvm/svm/svm.c
-index e6477affa..0f3d9a345 100644
+index e6477affa..dea281c6c 100644
 --- a/arch/x86/kvm/svm/svm.c
 +++ b/arch/x86/kvm/svm/svm.c
-@@ -819,6 +819,23 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
+@@ -819,6 +819,30 @@ static void svm_recalc_msr_intercepts(struct kvm_vcpu *vcpu)
  		svm_disable_intercept_for_msr(vcpu, MSR_IA32_MPERF, MSR_TYPE_R);
  	}
  
@@ -36,13 +103,37 @@ index e6477affa..0f3d9a345 100644
 +	svm_disable_intercept_for_msr(vcpu, 0xc001006a, MSR_TYPE_R);
 +	svm_disable_intercept_for_msr(vcpu, 0xc001006b, MSR_TYPE_R);
 +
++	/* CPPC boost MSRs (Zen 3): read-only passthrough so the guest sees
++	 * the boost capability table (fixes CPU-Z "Max multiplier" = base). */
++	svm_disable_intercept_for_msr(vcpu, 0xc00102b0, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc00102b1, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc00102b2, MSR_TYPE_R);
++	svm_disable_intercept_for_msr(vcpu, 0xc00102b3, MSR_TYPE_R);
++
 +	/* TSC read stays intercepted so the guest gets a virtualized,
 +	 * stable TSC. (Test: is native RDTSC the boot blocker?) */
 +
  	if (kvm_cpu_cap_has(X86_FEATURE_SHSTK)) {
  		bool shstk_enabled = guest_cpu_cap_has(vcpu, X86_FEATURE_SHSTK);
  
-@@ -1101,27 +1118,35 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
+@@ -1091,9 +1115,14 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
+ 	 * trigger #GP because of TSS I/O permission bitmap.
+ 	 * We intercept those #GP and allow access to them anyway
+ 	 * as VMware does.
++	 *
++	 * Also intercept #GP unconditionally: SVM instruction faults at
++	 * CPL > 0 deliver #UD from gp_interception(), which is required
++	 * so out-of-the-box AMD guests (and VMAware's svm_exceptions()
++	 * probe) see a bare-metal-consistent #UD rather than a #GP that
++	 * would reveal an active hypervisor.
+ 	 */
+-	if (enable_vmware_backdoor)
+-		set_exception_intercept(svm, GP_VECTOR);
++	set_exception_intercept(svm, GP_VECTOR);
+ 
+ 	svm_set_intercept(svm, INTERCEPT_INTR);
+ 	svm_set_intercept(svm, INTERCEPT_NMI);
+@@ -1101,27 +1130,35 @@ static void init_vmcb(struct kvm_vcpu *vcpu, bool init_event)
  	if (intercept_smi)
  		svm_set_intercept(svm, INTERCEPT_SMI);
  
@@ -57,7 +148,7 @@ index e6477affa..0f3d9a345 100644
 -	svm_set_intercept(svm, INTERCEPT_CPUID);
 -	svm_set_intercept(svm, INTERCEPT_INVD);
 +	svm_clr_intercept(svm, INTERCEPT_RDPMC);		/* native PMU */
-+	svm_clr_intercept(svm, INTERCEPT_CPUID);		/* native CPUID */
++	svm_set_intercept(svm, INTERCEPT_CPUID);		/* intercepted CPUID (native caused boot spin) */
 +	svm_clr_intercept(svm, INTERCEPT_INVD);		/* native INVD */
  	svm_set_intercept(svm, INTERCEPT_INVLPG);
 -	svm_set_intercept(svm, INTERCEPT_INVLPGA);
@@ -75,7 +166,7 @@ index e6477affa..0f3d9a345 100644
 -	svm_set_intercept(svm, INTERCEPT_CLGI);
 -	svm_set_intercept(svm, INTERCEPT_SKINIT);
 -	svm_set_intercept(svm, INTERCEPT_WBINVD);
-+	svm_set_intercept(svm, INTERCEPT_VMMCALL);		/* handled by vmmcall_interception */
++	svm_set_intercept(svm, INTERCEPT_VMMCALL);		/* hypercall handling via kvm_emulate_hypercall */
 +	svm_clr_intercept(svm, INTERCEPT_VMLOAD);		/* native VMLOAD */
 +	svm_clr_intercept(svm, INTERCEPT_VMSAVE);		/* native VMSAVE */
 +	svm_clr_intercept(svm, INTERCEPT_STGI);			/* native STGI */
@@ -86,49 +177,449 @@ index e6477affa..0f3d9a345 100644
 -	svm_set_intercept(svm, INTERCEPT_RDPRU);
 +	svm_clr_intercept(svm, INTERCEPT_RDPRU);
  	svm_set_intercept(svm, INTERCEPT_RSM);
-+	svm_set_intercept(svm, INTERCEPT_RDTSC);		/* intercepted: stable virtualized TSC */
-+	svm_set_intercept(svm, INTERCEPT_RDTSCP);		/* intercepted: stable virtualized TSCP */
++	svm_clr_intercept(svm, INTERCEPT_RDTSC);		/* native RDTSC */
++	svm_clr_intercept(svm, INTERCEPT_RDTSCP);		/* native RDTSCP */
  
  	if (!kvm_mwait_in_guest(vcpu->kvm)) {
  		svm_set_intercept(svm, INTERCEPT_MONITOR);
-@@ -2386,6 +2411,15 @@ static int skinit_interception(struct kvm_vcpu *vcpu)
+@@ -2296,6 +2333,18 @@ static int gp_interception(struct kvm_vcpu *vcpu)
+ 		if (svm->vmcb->save.rax & ~PAGE_MASK)
+ 			goto reinject;
+ 
++		/*
++		 * SVM instructions fault at CPL > 0. A bare-metal machine with
++		 * SVM disabled raises #UD, so deliver #UD here for user-mode
++		 * executions instead of the #GP that would reveal an active
++		 * (nested) SVM hypervisor. CPL0 executions (Hyper-V's own
++		 * VMRUN/VMLOAD/VMSAVE) are still emulated normally.
++		 */
++		if (svm->vmcb->save.cpl > 0) {
++			kvm_queue_exception(vcpu, UD_VECTOR);
++			return 1;
++		}
++
+ 		return emulate_svm_instr(vcpu, opcode);
+ 	}
+ 
+@@ -2386,6 +2435,61 @@ static int skinit_interception(struct kvm_vcpu *vcpu)
  	return 1;
  }
  
-+static int vmmcall_interception(struct kvm_vcpu *vcpu)
++/*
++ * Static CPUID cache: with host-passthrough the CPUID leaves never change,
++ * so cache each (leaf, subleaf) once and serve repeats without re-running
++ * the full KVM CPUID emulation on every VM exit. This keeps the L0->L1->L2
++ * CPUID path cheap while Hyper-V (L1) is present.
++ */
++#define VMW_CPUID_CACHE_ENTRIES 256
++
++struct vmw_cpuid_cache_entry {
++	u32 function;
++	u32 index;
++	u32 eax, ebx, ecx, edx;
++	u8 valid;
++};
++
++static DEFINE_PER_CPU(struct vmw_cpuid_cache_entry[VMW_CPUID_CACHE_ENTRIES],
++		      vmw_cpuid_cache);
++static DEFINE_PER_CPU(u32, vmw_cpuid_cache_count);
++
++static int handle_cpuid(struct kvm_vcpu *vcpu)
 +{
-+	// Skip the VMMCALL, then raise #UD so the guest faults instead of
-+	// looping on the same instruction.
-+	kvm_skip_emulated_instruction(vcpu);
-+	kvm_queue_exception(vcpu, UD_VECTOR);
-+	return 1;
++	u32 function = kvm_rax_read(vcpu);
++	u32 index = kvm_rcx_read(vcpu);
++	struct vmw_cpuid_cache_entry *cache = this_cpu_ptr(vmw_cpuid_cache);
++	u32 count = this_cpu_read(vmw_cpuid_cache_count);
++	int i;
++
++	/* Serve from static cache when possible. */
++	for (i = 0; i < count; i++) {
++		if (cache[i].valid && cache[i].function == function &&
++		    cache[i].index == index) {
++			kvm_rax_write(vcpu, cache[i].eax);
++			kvm_rbx_write(vcpu, cache[i].ebx);
++			kvm_rcx_write(vcpu, cache[i].ecx);
++			kvm_rdx_write(vcpu, cache[i].edx);
++			return kvm_skip_emulated_instruction(vcpu);
++		}
++	}
++
++	int ret = kvm_emulate_cpuid(vcpu);
++
++	/* Cache the freshly computed leaf if there is room. */
++	if (count < VMW_CPUID_CACHE_ENTRIES) {
++		cache[count].function = function;
++		cache[count].index = index;
++		cache[count].eax = kvm_rax_read(vcpu);
++		cache[count].ebx = kvm_rbx_read(vcpu);
++		cache[count].ecx = kvm_rcx_read(vcpu);
++		cache[count].edx = kvm_rdx_read(vcpu);
++		cache[count].valid = 1;
++		this_cpu_write(vmw_cpuid_cache_count, count + 1);
++	}
++	return ret;
 +}
 +
  static int task_switch_interception(struct kvm_vcpu *vcpu)
  {
  	struct vcpu_svm *svm = to_svm(vcpu);
-@@ -3279,7 +3313,7 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
- 	[SVM_EXIT_TASK_SWITCH]			= task_switch_interception,
- 	[SVM_EXIT_SHUTDOWN]			= shutdown_interception,
- 	[SVM_EXIT_VMRUN]			= vmrun_interception,
--	[SVM_EXIT_VMMCALL]			= kvm_emulate_hypercall,
-+	[SVM_EXIT_VMMCALL]			= vmmcall_interception,
- 	[SVM_EXIT_VMLOAD]			= vmload_interception,
- 	[SVM_EXIT_VMSAVE]			= vmsave_interception,
- 	[SVM_EXIT_STGI]				= stgi_interception,
-@@ -5092,6 +5126,10 @@ static int svm_vm_init(struct kvm *kvm)
+@@ -3267,7 +3371,7 @@ static int (*const svm_exit_handlers[])(struct kvm_vcpu *vcpu) = {
+ 	[SVM_EXIT_SMI]				= smi_interception,
+ 	[SVM_EXIT_VINTR]			= interrupt_window_interception,
+ 	[SVM_EXIT_RDPMC]			= kvm_emulate_rdpmc,
+-	[SVM_EXIT_CPUID]			= kvm_emulate_cpuid,
++	[SVM_EXIT_CPUID]			= handle_cpuid,
+ 	[SVM_EXIT_IRET]                         = iret_interception,
+ 	[SVM_EXIT_INVD]                         = kvm_emulate_invd,
+ 	[SVM_EXIT_PAUSE]			= pause_interception,
+@@ -3596,6 +3700,244 @@ static void svm_get_entry_info(struct kvm_vcpu *vcpu, u32 *intr_info,
+ 
+ }
+ 
++/*
++ * Present Hyper-V root-partition CPUID values to L2 (nested guest).
++ *
++ * When Windows runs as L2 under Hyper-V (L1) under KVM (L0), the
++ * hypervisor CPUID leaves L2 observes come from Hyper-V's
++ * nested-virtualization layer and identify the machine as a Hyper-V
++ * guest (child partition).  Some software reads these leaves to
++ * learn the partition type.
++ *
++ * KVM cannot answer these probes directly: the Windows kernel and
++ * secure kernel need the values that hvix64 computes.  Fabricated
++ * values break VBS/HVCI init and hang boot.
++ *
++ * Let the exit flow to L1 unchanged.  Record which leaf L2 asked.
++ * When L1 VMRUNs back into L2, rewrite only these bits:
++ *
++ *   0x40000000 vendor      EBX/ECX/EDX -> "Microsoft Hv" (EAX untouched)
++ *   0x40000003 privileges  EBX |= 1 -> CreatePartitions (root partition);
++ *                          the other 96 privilege bits stay real
++ *   0x40000006 nested      EAX bits [13:10] = 0 -> not a nested guest
++ *
++ * Everything else (all other leaves, all L1 CPUID) is untouched.
++ */
++/*
++ * Answer a repeated L2 CPUID from the cache filled with answers L1
++ * (hvix64) produced for the same (leaf, subleaf).  Return true if the
++ * exit was handled (guest RIP advanced past the CPUID); the exit is
++ * then not reflected to L1, which avoids the nested round trip.
++ *
++ * Serve only leaves whose answers are constant: leaf 0 (basic max
++ * leaf + vendor) and the Hyper-V range.  Leaves whose values can
++ * change over time (e.g. 0xD depending on XCR0) always go to L1.
++ */
++#define VMW_L2_CPUID_FAST_LEAF(l) \
++	((l) == 0 || ((l) >= 0x40000000 && (l) <= 0x4000000a))
++
++/*
++ * Cache lookup and answer, safe to call with IRQs disabled
++ * (fastpath).  Touches only vcpu->arch.regs; never touches guest
++ * memory.  The caller has already checked the exit code and the leaf
++ * range.
++ */
++static bool svm_vmw_answer_l2_cpuid_core(struct kvm_vcpu *vcpu)
++{
++	struct vcpu_svm *svm = to_svm(vcpu);
++	u32 leaf = (u32)vcpu->arch.regs[VCPU_REGS_RAX];
++	u32 subleaf = (u32)vcpu->arch.regs[VCPU_REGS_RCX];
++	int i;
++
++	for (i = 0; i < VMW_L2_CPUID_CACHE_ENTRIES; i++) {
++		if (!svm->nested.vmw_l2_cpuid_cache[i].valid)
++			continue;
++		if (svm->nested.vmw_l2_cpuid_cache[i].leaf != leaf ||
++		    svm->nested.vmw_l2_cpuid_cache[i].subleaf != subleaf)
++			continue;
++
++		kvm_rax_write(vcpu, svm->nested.vmw_l2_cpuid_cache[i].eax);
++		kvm_rbx_write(vcpu, svm->nested.vmw_l2_cpuid_cache[i].ebx);
++		kvm_rcx_write(vcpu, svm->nested.vmw_l2_cpuid_cache[i].ecx);
++		kvm_rdx_write(vcpu, svm->nested.vmw_l2_cpuid_cache[i].edx);
++		return true;
++	}
++
++	return false;
++}
++
++/*
++ * Slow-path variant used from svm_handle_exit(): full checks and RIP
++ * advance via kvm_skip_emulated_instruction().
++ */
++static bool svm_vmw_answer_l2_cpuid_fast(struct kvm_vcpu *vcpu)
++{
++	struct vcpu_svm *svm = to_svm(vcpu);
++	u32 leaf = (u32)kvm_rax_read(vcpu);
++
++	if (!vcpu->arch.hyperv_enabled)
++		return false;
++
++	if (svm->vmcb->control.exit_code != SVM_EXIT_CPUID)
++		return false;
++
++	if (!VMW_L2_CPUID_FAST_LEAF(leaf))
++		return false;
++
++	/* Only take over exits that would otherwise be reflected to L1. */
++	if (!vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_CPUID))
++		return false;
++
++	if (svm_vmw_answer_l2_cpuid_core(vcpu)) {
++		kvm_skip_emulated_instruction(vcpu);
++		return true;
++	}
++
++	return false;
++}
++
++/*
++ * Fastpath variant, called from svm_exit_handlers_fastpath() with
++ * IRQs disabled.  Answers from the cache and advances RIP with
++ * next_rip, which the caller has already validated to be non-zero.
++ * EXIT_FASTPATH_REENTER_GUEST re-enters L2 directly without the full
++ * exit handling.
++ */
++static fastpath_t svm_vmw_answer_l2_cpuid_fastpath(struct kvm_vcpu *vcpu)
++{
++	struct vcpu_svm *svm = to_svm(vcpu);
++	u32 leaf = (u32)vcpu->arch.regs[VCPU_REGS_RAX];
++
++	if (!vcpu->arch.hyperv_enabled)
++		return EXIT_FASTPATH_NONE;
++
++	if (svm->vmcb->control.exit_code != SVM_EXIT_CPUID)
++		return EXIT_FASTPATH_NONE;
++
++	if (!VMW_L2_CPUID_FAST_LEAF(leaf))
++		return EXIT_FASTPATH_NONE;
++
++	/* Only take over exits that would otherwise be reflected to L1. */
++	if (!vmcb12_is_intercept(&svm->nested.ctl, INTERCEPT_CPUID))
++		return EXIT_FASTPATH_NONE;
++
++	if (svm_vmw_answer_l2_cpuid_core(vcpu)) {
++		kvm_rip_write(vcpu, svm->vmcb->control.next_rip);
++		svm->next_rip = 0;
++		kvm_pmu_instruction_retired(vcpu);
++		return EXIT_FASTPATH_REENTER_GUEST;
++	}
++
++	return EXIT_FASTPATH_NONE;
++}
++
++static void svm_vmw_track_l2_cpuid(struct kvm_vcpu *vcpu)
++{
++	struct vcpu_svm *svm = to_svm(vcpu);
++
++	svm->nested.vmw_cpuid_pending = false;
++
++	if (!vcpu->arch.hyperv_enabled)
++		return;
++
++	if (svm->vmcb->control.exit_code != SVM_EXIT_CPUID)
++		return;
++
++	/* Record leaf and RIP so the answer can be patched at L2 re-entry.
++	 * svm_handle_exit() runs after svm_vcpu_run() copied VMCB save.RAX
++	 * into vcpu->arch.regs, so RAX here is the requested leaf. */
++	svm->nested.vmw_cpuid_pending_leaf = kvm_rax_read(vcpu);
++	svm->nested.vmw_cpuid_pending_subleaf = kvm_rcx_read(vcpu);
++	svm->nested.vmw_cpuid_exit_rip = svm->vmcb->save.rip;
++	svm->nested.vmw_cpuid_pending = true;
++}
++
++/*
++ * Called from nested_svm_vmrun() when L1 is about to (re)enter L2.
++ * If L2's last exit was one of the Hyper-V leaves listed above, and
++ * L2 resumes right after that CPUID (rip advanced by 2, the size of
++ * the CPUID instruction), the answer was computed by L1 (hvix64) and
++ * is about to be delivered to L2.  Rewrite only the listed bits.
++ *
++ * Register plumbing (SVM):
++ *  - VMRUN loads RAX/RSP/RIP from vmcb12; kvm_rax_write() path reads
++ *    vmcb12->save.rax, so EAX answers are patched in vmcb12.
++ *  - RBX/RCX/RDX are not loaded from the VMCB; hvix64 sets them as
++ *    live GPRs before VMRUN, and they reach L2 through
++ *    vcpu->arch.regs (loaded/stored by vmenter.S around every
++ *    VMRUN).  Patch those in vcpu->arch.regs.
++ */
++void svm_vmw_patch_l2_cpuid_answer(struct kvm_vcpu *vcpu, struct vmcb *vmcb12)
++{
++	struct vcpu_svm *svm = to_svm(vcpu);
++	u32 leaf = svm->nested.vmw_cpuid_pending_leaf;
++
++	if (!svm->nested.vmw_cpuid_pending)
++		return;
++	svm->nested.vmw_cpuid_pending = false;
++
++	/* L2 must resume exactly after the CPUID instruction. */
++	if (vmcb12->save.rip != svm->nested.vmw_cpuid_exit_rip + 2)
++		return;
++
++	switch (leaf) {
++	case 0x40000000:	/* Hypervisor vendor signature */
++		vcpu->arch.regs[VCPU_REGS_RBX] = 0x7263694d;	/* "Micr" */
++		vcpu->arch.regs[VCPU_REGS_RCX] = 0x666f736f;	/* "osof" */
++		vcpu->arch.regs[VCPU_REGS_RDX] = 0x76482074;	/* "t Hv" */
++		break;
++	case 0x40000003:	/* Partition privileges: claim root */
++		/* Set CreatePartitions (bit 0); keep all real bits.
++		 * Truncate to 32 bits like real CPUID does. */
++		vcpu->arch.regs[VCPU_REGS_RBX] = (u32)vcpu->arch.regs[VCPU_REGS_RBX] | 1;
++		break;
++	case 0x40000006:	/* HW resource assignment: not nested */
++		/* Clear nesting level [13:10]; keep everything else. */
++		vmcb12->save.rax = (u32)vmcb12->save.rax & ~0x3c00ULL;
++		vcpu->arch.regs[VCPU_REGS_RAX] &= ~0x3c00ULL;
++		break;
++	default:
++		break;
++	}
++
++	/*
++	 * Cache the final (patched) answer so future L2 probes of the
++	 * same (leaf, subleaf) can be served directly by L0 without
++	 * the nested round trip.  The subleaf recorded at exit time is
++	 * the key L2 actually requested.  Cache only constant leaves.
++	 */
++	if (VMW_L2_CPUID_FAST_LEAF(leaf)) {
++		u32 subleaf = svm->nested.vmw_cpuid_pending_subleaf;
++		int i, slot = -1;
++
++		for (i = 0; i < VMW_L2_CPUID_CACHE_ENTRIES; i++) {
++			if (svm->nested.vmw_l2_cpuid_cache[i].valid &&
++			    svm->nested.vmw_l2_cpuid_cache[i].leaf == leaf &&
++			    svm->nested.vmw_l2_cpuid_cache[i].subleaf == subleaf) {
++				slot = i;
++				break;
++			}
++			if (slot < 0 && !svm->nested.vmw_l2_cpuid_cache[i].valid)
++				slot = i;
++		}
++
++		if (slot >= 0) {
++			svm->nested.vmw_l2_cpuid_cache[slot].leaf = leaf;
++			svm->nested.vmw_l2_cpuid_cache[slot].subleaf = subleaf;
++			svm->nested.vmw_l2_cpuid_cache[slot].eax =
++				(u32)vmcb12->save.rax;
++			svm->nested.vmw_l2_cpuid_cache[slot].ebx =
++				(u32)vcpu->arch.regs[VCPU_REGS_RBX];
++			svm->nested.vmw_l2_cpuid_cache[slot].ecx =
++				(u32)vcpu->arch.regs[VCPU_REGS_RCX];
++			svm->nested.vmw_l2_cpuid_cache[slot].edx =
++				(u32)vcpu->arch.regs[VCPU_REGS_RDX];
++			svm->nested.vmw_l2_cpuid_cache[slot].valid = true;
++		}
++	}
++}
++
++
+ static int svm_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
+ {
+ 	struct vcpu_svm *svm = to_svm(vcpu);
+@@ -3614,6 +3956,22 @@ static int svm_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
+ 
+ 		trace_kvm_nested_vmexit(vcpu, KVM_ISA_SVM);
+ 
++		/*
++		 * Try to answer a repeated L2 CPUID from the cache of
++		 * answers hvix64 produced earlier.  A hit avoids the
++		 * nested exit/reflection/VMRUN round trip; the delivered
++		 * values are exactly what L1 computed for the same leaf.
++		 */
++		if (svm_vmw_answer_l2_cpuid_fast(vcpu))
++			return 1;
++
++		/*
++		 * Record L2's Hyper-V CPUID probes so the answer can be
++		 * patched when L1 (Hyper-V) VMRUNs back into L2.  The
++		 * exit itself is forwarded to L1 untouched.
++		 */
++		svm_vmw_track_l2_cpuid(vcpu);
++
+ 		vmexit = nested_svm_exit_special(svm);
+ 
+ 		if (vmexit == NESTED_EXIT_CONTINUE)
+@@ -4234,8 +4592,17 @@ static fastpath_t svm_exit_handlers_fastpath(struct kvm_vcpu *vcpu)
+ 	if (!nrips || !control->next_rip)
+ 		return EXIT_FASTPATH_NONE;
+ 
+-	if (is_guest_mode(vcpu))
++	/*
++	 * Answer repeated L2 CPUID probes from the cache here, in the
++	 * IRQs-off fastpath, so their exit latency stays close to bare
++	 * metal.
++	 */
++	if (is_guest_mode(vcpu)) {
++		fastpath_t fp = svm_vmw_answer_l2_cpuid_fastpath(vcpu);
++		if (fp != EXIT_FASTPATH_NONE)
++			return fp;
+ 		return EXIT_FASTPATH_NONE;
++	}
+ 
+ 	switch (control->exit_code) {
+ 	case SVM_EXIT_MSR:
+@@ -5092,6 +5459,12 @@ static int svm_vm_init(struct kvm *kvm)
  {
  	int type = kvm->arch.vm_type;
  
-+	// Do not patch hypercall instructions. Leave them unmodified so the
-+	// guest faults instead of exposing the hypercall path.
++	/*
++	 * Do not patch hypercall instructions.  Leave them unmodified so
++	 * the guest faults instead of exposing the hypercall path.
++	 */
 +	kvm->arch.disabled_quirks |= KVM_X86_QUIRK_FIX_HYPERCALL_INSN;
 +
  	if (type != KVM_X86_DEFAULT_VM &&
  	    type != KVM_X86_SW_PROTECTED_VM) {
  		kvm->arch.has_protected_state =
+diff --git a/arch/x86/kvm/svm/svm.h b/arch/x86/kvm/svm/svm.h
+index 6942e6b0e..dde90ef97 100644
+--- a/arch/x86/kvm/svm/svm.h
++++ b/arch/x86/kvm/svm/svm.h
+@@ -218,6 +218,33 @@ struct svm_nested_state {
+ 	 * on its side.
+ 	 */
+ 	bool force_msr_bitmap_recalc;
++
++	/*
++	 * L2 Hyper-V CPUID patch state.  When L2 exits on CPUID for a
++	 * hypervisor leaf, the leaf and RIP are recorded here; when L1
++	 * VMRUNs back into L2, the answer registers are patched to
++	 * present root-partition values to L2.
++	 */
++	u32 vmw_cpuid_pending_leaf;
++	u32 vmw_cpuid_pending_subleaf;
++	u64 vmw_cpuid_exit_rip;
++	bool vmw_cpuid_pending;
++
++	/*
++	 * Cache of L2 CPUID answers as computed (and patched) by L1.
++	 * Repeated L2 CPUID probes are answered directly by L0 with
++	 * the cached values instead of reflecting the exit to L1,
++	 * which keeps the exit latency close to bare metal.  Every
++	 * answer is one hvix64 itself produced for the same (leaf,
++	 * subleaf); nothing is fabricated.
++	 */
++#define VMW_L2_CPUID_CACHE_ENTRIES 32
++	struct {
++		u32 leaf;
++		u32 subleaf;
++		u32 eax, ebx, ecx, edx;
++		bool valid;
++	} vmw_l2_cpuid_cache[VMW_L2_CPUID_CACHE_ENTRIES];
+ };
+ 
+ struct vcpu_sev_es_state {
+@@ -782,6 +809,7 @@ void svm_leave_nested(struct kvm_vcpu *vcpu);
+ void svm_free_nested(struct vcpu_svm *svm);
+ int svm_allocate_nested(struct vcpu_svm *svm);
+ int nested_svm_vmrun(struct kvm_vcpu *vcpu);
++void svm_vmw_patch_l2_cpuid_answer(struct kvm_vcpu *vcpu, struct vmcb *vmcb12);
+ void svm_copy_vmrun_state(struct vmcb_save_area *to_save,
+ 			  struct vmcb_save_area *from_save);
+ void svm_copy_vmloadsave_state(struct vmcb *to_vmcb, struct vmcb *from_vmcb);
 diff --git a/arch/x86/kvm/x86.c b/arch/x86/kvm/x86.c
-index fd1c4a36b..77d96a6a9 100644
+index fd1c4a36b..a3dc66b83 100644
 --- a/arch/x86/kvm/x86.c
 +++ b/arch/x86/kvm/x86.c
 @@ -3567,9 +3567,6 @@ static int set_msr_mce(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
@@ -163,18 +654,19 @@ index fd1c4a36b..77d96a6a9 100644
  
  		if (data & ~vcpu->arch.guest_supported_xss)
  			return 1;
-@@ -4224,6 +4221,10 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+@@ -4224,6 +4221,11 @@ int kvm_set_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
  		 * the need to ignore the workaround.
  		 */
  		break;
-+	/* Accept P-state writes silently. The guest reads these values
-+	 * natively; writes carry no security effect. */
++	/* Accept P-state and CPPC writes silently. The guest reads these
++	 * values natively; writes carry no security effect. */
 +	case 0xc0010062 ... 0xc001006b:
++	case 0xc00102b0 ... 0xc00102b3:
 +		break;
  #ifdef CONFIG_KVM_HYPERV
  	case HV_X64_MSR_GUEST_OS_ID ... HV_X64_MSR_SINT15:
  	case HV_X64_MSR_SYNDBG_CONTROL ... HV_X64_MSR_SYNDBG_PENDING_BUFFER:
-@@ -4318,8 +4319,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
+@@ -4318,8 +4320,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
  		data = vcpu->arch.mcg_cap;
  		break;
  	case MSR_IA32_MCG_CTL:
@@ -183,7 +675,7 @@ index fd1c4a36b..77d96a6a9 100644
  		data = vcpu->arch.mcg_ctl;
  		break;
  	case MSR_IA32_MCG_STATUS:
-@@ -4330,8 +4329,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
+@@ -4330,8 +4330,6 @@ static int get_msr_mce(struct kvm_vcpu *vcpu, u32 msr, u64 *pdata, bool host)
  		if (msr > last_msr)
  			return 1;
  
@@ -192,7 +684,7 @@ index fd1c4a36b..77d96a6a9 100644
  		offset = array_index_nospec(msr - MSR_IA32_MC0_CTL2,
  					    last_msr + 1 - MSR_IA32_MC0_CTL2);
  		data = vcpu->arch.mci_ctl2_banks[offset];
-@@ -4558,9 +4555,11 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+@@ -4558,9 +4556,11 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
  		return get_msr_mce(vcpu, msr_info->index, &msr_info->data,
  				   msr_info->host_initiated);
  	case MSR_IA32_XSS:
@@ -207,7 +699,7 @@ index fd1c4a36b..77d96a6a9 100644
  		msr_info->data = vcpu->arch.ia32_xss;
  		break;
  	case MSR_K7_CLK_CTL:
-@@ -4571,10 +4570,19 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
+@@ -4571,10 +4571,20 @@ int kvm_get_msr_common(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
  		 *
  		 * This prevents guest kernels on AMD host with CPU
  		 * type 6, model 8 and higher from exploding due to
@@ -219,7 +711,8 @@ index fd1c4a36b..77d96a6a9 100644
 +	/* Read P-state and CPPC values from host hardware. */
 +	case 0xc0010062 ... 0xc001006b:
 +	case 0xc0010293:
-+	case 0xc001029a: {
++	case 0xc001029a:
++	case 0xc00102b0 ... 0xc00102b3: {
 +		u32 lo, hi;
 +		if (rdmsr_safe(msr_info->index, &lo, &hi))
 +			return 1;
@@ -229,3 +722,29 @@ index fd1c4a36b..77d96a6a9 100644
  #ifdef CONFIG_KVM_HYPERV
  	case HV_X64_MSR_GUEST_OS_ID ... HV_X64_MSR_SINT15:
  	case HV_X64_MSR_SYNDBG_CONTROL ... HV_X64_MSR_SYNDBG_PENDING_BUFFER:
+@@ -10503,7 +10513,9 @@ static int emulator_fix_hypercall(struct x86_emulate_ctxt *ctxt)
+ 
+ 	/*
+ 	 * If the quirk is disabled, synthesize a #UD and let the guest pick up
+-	 * the pieces.
++	 * the pieces. The hypercall-patching quirk is disabled via
++	 * KVM_X86_QUIRK_FIX_HYPERCALL_INSN (see svm_vm_init), so this path
++	 * delivers #UD without ever patching guest memory.
+ 	 */
+ 	if (!kvm_check_has_quirk(vcpu->kvm, KVM_X86_QUIRK_FIX_HYPERCALL_INSN)) {
+ 		ctxt->exception.error_code_valid = false;
+diff --git a/include/linux/percpu.h b/include/linux/percpu.h
+index 85bf8dd9f..29b313907 100644
+--- a/include/linux/percpu.h
++++ b/include/linux/percpu.h
+@@ -15,7 +15,9 @@
+ 
+ /* enough to cover all DEFINE_PER_CPUs in modules */
+ #ifdef CONFIG_MODULES
+-#define PERCPU_MODULE_RESERVE		(8 << 10)
++/* kvm-amd needs 7280 bytes; the default 8KB reserve is too tight and
++ * fails with ENOMEM once other modules consume the remainder */
++#define PERCPU_MODULE_RESERVE		(32 << 10)
+ #else
+ #define PERCPU_MODULE_RESERVE		0
+ #endif

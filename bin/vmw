@@ -69,7 +69,7 @@ cmd_setup() {
     vmw::load_config "$profile" || return 1
     fmtr::box_text "SETUP: $profile"
     vmw::verify_patches || { fmtr::error "Patch verification failed. Run 'vmw patch-status'."; return 1; }
-    # Build an undetected VM in dependency order: kernel first so the boot
+    # Build the VM in dependency order: kernel first so the boot
     # entry exists, then emulator/firmware, then passthrough, then deploy.
     for mod in virtualization kernel qemu edk2 vfio deploy; do
         fmtr::info "[$mod] running..."
@@ -78,12 +78,12 @@ cmd_setup() {
     fmtr::log "Setup complete for profile '$profile'."
 }
 
-# Steps that make up the guided build of an undetected VM, in order.
+# Steps that make up the guided build, in order.
 Vmw_GUIDED_STEPS=(
     "virtualization|Install virtualization stack (libvirt, QEMU, swtpm)|Install the libvirt/KVM stack so the VM can run"
     "kernel|Build patched kernel (linux-tkg)|Build and install the patched kernel, then set up its boot entry"
-    "qemu|Build patched QEMU|Clone, patch, and build the anti-detection QEMU"
-    "edk2|Build patched EDK2/OVMF|Clone, patch, and build the anti-detection UEFI firmware"
+    "qemu|Build patched QEMU|Clone, patch, and build the research QEMU"
+    "edk2|Build patched EDK2/OVMF|Clone, patch, and build the research UEFI firmware"
     "vfio|Configure GPU passthrough|Set up VFIO/IOMMU and bootloader for a passed-through dGPU"
     "deploy|Deploy VM from profile|Generate the domain XML and define the VM"
 )
@@ -94,7 +94,7 @@ cmd_guided() {
 
     fmtr::box_text "VMW guided setup: $profile"
     echo ""
-    fmtr::info "This will build an undetected VM step by step:"
+    fmtr::info "This will build the VM step by step:"
     local i step label desc
     for i in "${!Vmw_GUIDED_STEPS[@]}"; do
         step="${Vmw_GUIDED_STEPS[$i]}"

@@ -18,7 +18,7 @@
  *     Compiler ID      "INTL"
  *     Compiler Version 0x20240927 (539232551)
  */
-DefinitionBlock ("", "SSDT", 1, "_ASUS_", "Notebook", 0x20250321)
+DefinitionBlock ("", "SSDT", 1, "LENOVO", "CB-01   ", 0x00000001)
 {
     External (_SB_.PCI0, DeviceObj)
 

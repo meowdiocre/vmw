@@ -204,9 +204,6 @@ patch_kernel_files() {
         patch_name="intel702.mypatch"
     fi
 
-    # tkg reads user patches from a version-specific dir (e.g.
-    # linux70-tkg-userpatches/) and requires the .mypatch extension, which
-    # is what the repo files use.
     local basever="${KERNEL_MAJOR}${KERNEL_MINOR}"
     local user_patch_dir="linux${basever}-tkg-userpatches"
     local source_patch="$VMW_ROOT/patches/Kernel/$patch_name"
@@ -297,7 +294,7 @@ create_grub_entry() {
 
     cat <<EOF | $ROOT_ESC tee -a "$grub_cfg" >/dev/null
 
-# Added by VMW: patched anti-detection kernel
+# Added by VMW: patched research kernel
 menuentry "HvP-RDTSC (linux-tkg eevdf)" --class kernel --class os {
     load_video
     set gfxpayload=keep

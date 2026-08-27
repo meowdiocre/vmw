@@ -10,7 +10,10 @@
 #   deploy.sh --print <profile>  # write XML to configs/<profile>.xml (gitignored)
 #
 # Replaces the old interactive virt-install flow with a deterministic,
-# schema-validated generator (resources/generate_xml.py).
+# schema-validated generator (python/vmw/genxml.py).
+#
+# Note: the generator does not yet emit -acpitable args, machine args,
+# or hostdev passthrough entries. See RESEARCH.md section 9.
 # =============================================================================
 
 PROFILE="${1:-}"

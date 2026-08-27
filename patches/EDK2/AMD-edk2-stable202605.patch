@@ -217,3 +217,13 @@ index 7e45402..b473fd7 100644
  
  #pragma pack(1)
  typedef struct {
+diff --git a/OvmfPkg/Include/Fdf/OvmfPkgDefines.fdf.inc b/OvmfPkg/Include/Fdf/OvmfPkgDefines.fdf.inc
+index e2543a1..5453454 100644
+--- a/OvmfPkg/Include/Fdf/OvmfPkgDefines.fdf.inc
++++ b/OvmfPkg/Include/Fdf/OvmfPkgDefines.fdf.inc
+@@ -103,4 +103,4 @@ SET gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageFtwWorkingBase = gUefiOvmfPk
+ SET gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageFtwSpareBase   = gUefiOvmfPkgTokenSpaceGuid.PcdOvmfFlashNvStorageFtwSpareBase
+ !endif
+ 
+-DEFINE MEMFD_BASE_ADDRESS = 0x800000
++DEFINE MEMFD_BASE_ADDRESS = 0x820000
