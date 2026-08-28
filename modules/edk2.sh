@@ -155,6 +155,18 @@ patch_ovmf() {
   Creator_ID="$(uhex 4 "$(LC_ALL=C $ROOT_ESC dd if="$t" bs=1 skip=28 count=4 status=none | tr '\0' ' ')")"
   OEMID="$(LC_ALL=C $ROOT_ESC dd if="$t" bs=1 skip=10 count=6 status=none | tr '\0' ' ')"
 
+  # Bail out rather than write junk into the firmware. An empty value here
+  # means the FACP read failed (usually a missing privilege escalation), and
+  # ACPI requires the OEM ID to be exactly 6 bytes.
+  if [[ ${#OEMID} -ne 6 ]]; then
+    fmtr::error "FADT OEM ID is ${#OEMID} bytes, expected 6: '$OEMID'"
+    return 1
+  fi
+  local v
+  for v in "$BIOS_VENDOR" "$BIOS_VERSION" "$BIOS_DATE"; do
+    [[ -n $v ]] || { fmtr::error "Host DMI value missing; cannot rewrite firmware metadata."; return 1; }
+  done
+
   sed -i \
     -e 's@VendStr = L"unknown";@VendStr = L"'"$BIOS_VENDOR"'";@' \
     -e 's@VersStr = L"unknown";@VersStr = L"'"$BIOS_VERSION"'";@' \
@@ -166,7 +178,7 @@ patch_ovmf() {
     -e 's@(PcdFirmwareRevision)\|0x00010000\|@\1|'"$BIOS_REVISION"'|@' \
     -e 's@(PcdFirmwareVersionString)\|L""\|@\1|L"'"$BIOS_VERSION"'"|@' \
     -e 's@(PcdFirmwareReleaseDateString)\|L""\|@\1|L"'"$BIOS_DATE"'"|@' \
-    -e 's@(PcdAcpiDefaultOemId)\|"INTEL "\|@\1|'"$OEMID"'|@' \
+    -e 's@(PcdAcpiDefaultOemId)\|"INTEL "\|@\1|"'"$OEMID"'"|@' \
     -e 's@(PcdAcpiDefaultOemTableId)\|0x20202020324B4445\|@\1|'"$OEM_Table_ID"'|@' \
     -e 's@(PcdAcpiDefaultOemRevision)\|0x00000002\|@\1|'"$OEM_Revision"'|@' \
     -e 's@(PcdAcpiDefaultCreatorId)\|0x20202020\|@\1|'"$Creator_ID"'|@' \
