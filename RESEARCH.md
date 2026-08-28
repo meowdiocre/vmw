@@ -66,9 +66,12 @@ Host kernel `7.0.0-273-tkg-eevdf` (built from this repo) runs the VM
 Hyper-V and HVCI turned on in the guest, and the RTX 3050 Ti passed
 through with no Code 43.
 
-VMAware reports **2 detections out of 85 checks**:
+The last measured run reported **2 detections out of 85 checks**:
 
-- **MEASURED_BOOT**: fixable, needs an OVMF rebuild (§6).
+- **MEASURED_BOOT**: fixed on 2026-08-28. New firmware is built,
+  installed, and the guest is now running on it. VMAware has not been
+  re-run inside the guest yet, so the count above is still the old
+  measurement (§6).
 - **TIMER**, memory-ratio half only: not fixable by speeding up the
   existing code path. See §7 for why, and for the one real option
   left.
@@ -79,8 +82,10 @@ raises its TIMER threshold and runs its nested-hypervisor checks.
 This is the harder path, and we pass it everywhere except the memory
 ratio.
 
-`sudo` password on the dev box is `1234`. Use `echo '1234' | sudo -S
-<cmd>`. Do not use `sudo -A`; it opens a graphical prompt.
+Some commands below need root. Export the dev box password once per
+shell (`read -rs VMW_SUDO`) and pipe it, rather than putting it in a
+file: `echo "$VMW_SUDO" | sudo -S <cmd>`. Do not use `sudo -A`; it
+opens a graphical prompt.
 
 ---
 
@@ -233,21 +238,300 @@ already satisfies that.
 
 ---
 
-## 6. Open: MEASURED_BOOT
+## 6. MEASURED_BOOT: fixed, awaiting a guest reboot to confirm
 
 VMAware reads the TBS TCG log for event
 `EV_EFI_PLATFORM_FIRMWARE_BLOB` (event `0x80000008`, PCR 0) and
-compares it against OVMF's known firmware-volume bounds:
-`(0x830000, 0xD0000)` for PEIFV or `(0x900000, 0xE80000)` for DXEFV.
-Those are hardcoded in VMAware as a fingerprint of stock OVMF.
+compares it against OVMF's known firmware-volume bounds. The test is
+an exact match on the address and length pair
+(`vmaware.hpp`, `measured_boot()`):
+
+```c
+if ((base_addr == 0x830000 && blob_len == 0xD0000) ||   /* PEIFV */
+    (base_addr == 0x900000 && blob_len == 0xE80000)) {  /* DXEFV */
+    return true;
+}
+```
+
+Both branches test the base address, so moving either volume defeats
+the match. The lengths are left alone.
 
 Fix: the EDK2 patch (`patches/EDK2/AMD-edk2-stable202605.patch`)
-moves `MEMFD_BASE_ADDRESS` from `0x800000` to `0x820000`. That
-shifts PEIFV to `0x850000` and DXEFV to `0x920000`, off VMAware's
-hardcoded bounds. The patch is written; **OVMF has not been rebuilt
-with it yet**. Run the `edk2` module (`modules/edk2.sh`,
-interactive) or automate its prompts, then redeploy the VM with the
-new `OVMF_CODE.fd`.
+moves `MEMFD_BASE_ADDRESS` from `0x800000` to `0x820000` in
+`OvmfPkg/Include/Fdf/OvmfPkgDefines.fdf.inc`. Every volume inside
+MEMFD is placed at a fixed offset from that base
+(`OvmfPkg/Include/Fdf/MemFd.fdf.inc`: PEIFV at `+0x030000`, DXEFV at
+`+0x100000`), so one define moves both.
+
+Built and installed on 2026-08-28, then rebuilt the same day to add
+the host firmware metadata described in §9. The compiled-in constants
+in `Build/OvmfX64/RELEASE_GCC/X64/OvmfPkg/Sec/SecMain/DEBUG/AutoGen.h`
+confirm the new layout:
+
+| PCD | Value now | VMAware expects |
+|---|---|---|
+| `PcdOvmfPeiMemFvBase` | `0x850000` | `0x830000` — no match |
+| `PcdOvmfPeiMemFvSize` | `0x0D0000` | `0x0D0000` |
+| `PcdOvmfDxeMemFvBase` | `0x920000` | `0x900000` — no match |
+| `PcdOvmfDxeMemFvSize` | `0xE80000` | `0xE80000` |
+
+Only `OVMF_CODE.fd` changed. `OVMF_VARS.fd` is the variable store and
+does not depend on `MEMFD_BASE_ADDRESS`; the build produced a
+byte-identical template, so the deployed copy (which carries the
+host's enrolled Secure Boot keys) and the per-domain NVRAM at
+`/var/lib/libvirt/qemu/nvram/aptwannabe_VARS.fd` both stay valid.
+
+The previous firmware is kept at
+`/opt/vmw/firmware/OVMF_CODE.fd.pre-memfd.bak`. To roll back:
+
+```bash
+echo "$VMW_SUDO" | sudo -S cp /opt/vmw/firmware/OVMF_CODE.fd.pre-memfd.bak \
+                         /opt/vmw/firmware/OVMF_CODE.fd
+```
+
+### Power-cycled onto the new firmware, 2026-08-28
+
+pflash images load at domain start, so a reboot from inside the guest
+keeps the old firmware. The domain has to be stopped and started.
+
+The graceful shutdown did not work. `virsh shutdown` delivered the
+ACPI power button event and the guest ignored it for several minutes
+while still serving RDP and RPC. This domain has no
+`qemu-guest-agent` channel, so libvirt has no stronger lever than the
+power button. The VM was forced off with `virsh destroy` and started
+again.
+
+The boot was clean: Windows reached RDP in about 25 seconds, with no
+BitLocker recovery prompt, so nothing on this guest is sealed to
+PCR 0 in a way the firmware change disturbs. Confirmed the running
+QEMU has the new image by reading its open file handles:
+`/proc/<pid>/fd` shows `/opt/vmw/firmware/OVMF_CODE.fd` as pflash0.
+
+The per-domain NVRAM was copied to
+`/var/lib/libvirt/qemu/nvram/aptwannabe_VARS.fd.pre-newfw` before the
+first boot on the new firmware.
+
+Note that `-debugcon` writes to `/tmp/ovmf-debug.log`, but the
+firmware is built `-b RELEASE`, so that file stays empty. Runtime
+verification of the FV addresses would need a `DEBUG` build.
+
+**Still to do:** run VMAware inside the guest and confirm
+MEASURED_BOOT now reports clean. Until then the 2/85 figure in §3 is
+the old measurement.
+
+If a future firmware change does trip a BitLocker recovery prompt,
+suspend protection for one boot from inside the guest first:
+
+```powershell
+manage-bde -status C:
+manage-bde -protectors -disable C: -RebootCount 1
+```
+
+---
+
+## 6b. BOOT_LOGO: the stock EDK2 logo was shipping (fixed 2026-08-28)
+
+A VMAware run on 2026-08-28 reported BOOT_LOGO detected, with
+`crc=0x110350c5`. That value is not incidental. VMAware hashes the
+boot logo and compares against two known constants:
+
+```c
+switch (hash) {
+    case 0x110350C5: return core::add(brand_enum::QEMU);   /* TianoCore EDK2 */
+    case 0x87c39681: return core::add(brand_enum::HYPERV);
+    default:         return false;
+}
+```
+
+The guest was publishing the stock TianoCore logo. Cause: phase 3 of
+`patch_ovmf()` replaces `MdeModulePkg/Logo/Logo.bmp` with the host's
+BGRT image, and like phase 2 (§9) it had never run on this tree.
+`git status` confirmed `Logo.bmp` was pristine.
+
+Fix: copy `/sys/firmware/acpi/bgrt/image` over
+`MdeModulePkg/Logo/Logo.bmp` and rebuild. The host BGRT passes EDK2's
+decoder rules (see `REFERENCE.md`): 505x98, 24 bpp, uncompressed.
+
+### The hash is not taken over the file
+
+Worth recording, because it misleads. The stock `Logo.bmp` is 12,446
+bytes and hashes (crc32c) to `0x63CD1A69`, which is **not**
+`0x110350C5`. The guest reported a 33,694-byte bitmap. So Windows is
+not returning the file: `NtQuerySystemInformation`
+(`SystemBootLogoInformation`, class 140) returns the BGRT bitmap that
+OVMF **re-encodes** from `Logo.bmp` at boot, at different dimensions
+and colour depth.
+
+The practical consequence is that the resulting hash cannot be
+predicted from the source file. Changing the logo is guaranteed to
+change what gets published, and so to miss both hardcoded constants,
+but the only way to learn the new value is to boot and re-run
+VMAware.
+
+---
+
+## 6c. Open: POWER_CAPABILITIES
+
+Reported detected on the same run, with
+`!(S0||S1||S2||S3||S4||H) pattern` — the guest advertises no sleep
+states at all. VMAware's logic (`power_capabilities()`, reading
+`NtPowerInformation` / `SystemPowerCapabilities`):
+
+| Pattern | Verdict |
+|---|---|
+| `(S0 \|\| S3) && (S4 \|\| HiberFilePresent)` | physical, passes |
+| `!(S0\|\|S3\|\|S4\|\|Hiber) && (S1\|\|S2)` | VM |
+| nothing supported at all | VM — **this is us** |
+
+To pass, the guest needs one of S0 or S3, **and** one of S4 or a
+hibernation file. Note this is not a spoofable string; it is what
+Windows believes about its own power hardware.
+
+The libvirt side is already correct. The live domain carries:
+
+```xml
+<pm>
+  <suspend-to-mem enabled='yes'/>
+  <suspend-to-disk enabled='yes'/>
+</pm>
+```
+
+and `genxml.py` emits that from the profile's `pm:` block. So QEMU
+advertises S3 and S4 in ACPI, and something inside Windows is
+discarding them.
+
+The likely cause is Hyper-V. A Windows instance running as a Hyper-V
+root partition hands power management to the hypervisor, which
+historically drops S3 and S4. That fits this project exactly: §1
+notes the same tension, and this is another instance of it —
+turning Hyper-V on costs a detection surface.
+
+Nothing has been changed yet. The next step is a diagnostic, not a
+fix. Run this in the guest:
+
+```powershell
+powercfg /a
+```
+
+It lists every standby state and, for the unavailable ones, the
+reason — distinguishing "the firmware does not support this state"
+(an ACPI problem we can fix in QEMU) from "the hypervisor does not
+support this state" (a Hyper-V consequence, much harder).
+
+### What `powercfg /a` reported
+
+Run in the guest on 2026-08-28:
+
+| State | Blocked by |
+|---|---|
+| S1, S2 | firmware **and** hypervisor |
+| S3 | **hypervisor only** |
+| Hibernate | **hypervisor only** |
+| S0 Low Power Idle | **firmware only** |
+| Hybrid Sleep, Fast Startup | derived from the above |
+
+Read the reasons, not just the list. S3 and hibernate are gone
+because hvix64 refuses them, and that is not negotiable while goal 2
+stands. S0 low-power idle was refused by *our* firmware, which we do
+control. That made it the only candidate.
+
+### Hibernation is not needed
+
+Worth stating, because it looks like a blocker and is not. The
+physical pattern `(S0 || S3) && (S4 || Hiber)` is unreachable here.
+But failing it does not mean detected — the function falls through to
+two VM patterns, and `S0 = true` defeats both, because each begins
+`!(S0 || S3 || S4 || Hiber)`. Execution then reaches the
+manufacturer check at the end, which returns "not a VM" outright for
+Lenovo, Qiyida, or a Dell Latitude. Our `smbios.bin` reports
+`LENOVO` / `Legion 5 15ACH6`, and VMAware reads the manufacturer from
+`HKLM\HARDWARE\DESCRIPTION\System\BIOS\SystemManufacturer`.
+
+So **S0 alone is sufficient**. `powercfg /h on` is not needed.
+
+Note also that enabling S1 or S2 would make things *worse*: the first
+VM pattern is `!(S0||S3||S4||Hiber) && (S1||S2)`, so S1/S2 without S0
+is an explicit VM signature.
+
+### Attempted and reverted: FADT Low Power S0 Idle Capable
+
+Two changes were made to `hw/i386/acpi-build.c` and both are now
+reverted. Recorded here so the next person does not repeat them.
+
+**Step 1 — set the flag.** Added
+`(1 << ACPI_FADT_F_LOW_POWER_S0_IDLE_CAPABLE)` (FADT flags bit 21) to
+`init_common_fadt_data()`. The guest booted fine, but `powercfg /a`
+was unchanged. Dumping the guest FADT through
+`GetSystemFirmwareTable` showed why:
+
+```
+FADT revision = 3
+FADT flags    = 0x002084A5
+bit21 LowPowerS0IdleCapable = 1
+```
+
+The flag reached the guest. Windows ignored it, because
+`LOW_POWER_S0_IDLE_CAPABLE` is an ACPI 5.0 addition and QEMU builds
+the x86 FADT at revision 3. Windows validates the revision before
+honouring flags from later specs.
+
+**Step 2 — bump the revision.** Changed `.rev = 3` to `.rev = 5`,
+leaving `SLEEP_CONTROL_REG` and `SLEEP_STATUS_REG` zeroed, which
+ACPI 5.0 permits when `HW_REDUCED_ACPI` is clear (q35 keeps the
+legacy PM1 registers). The `rev = 1` override further down is
+piix-only, for Windows 2000, so q35 was the only machine affected.
+
+**This broke the guest.** Windows never reached RDP. One vCPU pinned
+at 100% and `info registers` showed RIP frozen at
+`fffff80521764e52` across samples — an ntoskrnl address, the same
+fatal spin signature as the kernel-patch boot hangs in §4. Reverted;
+the rebuilt binary is byte-identical to the pre-change backup
+(md5 `79c13a8c…`), and the guest boots normally again.
+
+Whether rev 5 needs the sleep registers actually populated rather
+than zeroed was not tested. Each attempt costs a hung guest and a
+manual recovery cycle, so it was not worth continuing blind.
+
+### Fixed by registry override, 2026-08-28
+
+The firmware route was abandoned. What works instead is a single
+registry value, applied in the guest:
+
+```
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\Power" ^
+  /v PlatformAoAcOverride /t REG_DWORD /d 1 /f
+```
+
+Reboot, and Windows reports `AoAc`. That sets S0, which is all the
+check needs (see "Hibernation is not needed" above). Confirmed
+working. To undo:
+
+```
+reg delete "HKLM\SYSTEM\CurrentControlSet\Control\Power" ^
+  /v PlatformAoAcOverride /f
+```
+
+VMAware's own source comments on this key without acting on it:
+
+```c
+/* Could check for HKLM\SYSTEM\CurrentControlSet\Control\Power\PlatformAoAcOverride */
+```
+
+So this fix is one upstream commit away from being detected. It is a
+registry artifact, not a hardware property, and it is weaker than a
+firmware fix would have been. Treat it as provisional, and note it
+does nothing for the ring-0 goals in `README.md`, where a detector is
+free to read the same key.
+
+The firmware route is not closed, just unproven. The narrow open
+question: does an x86 FADT at revision 5 boot Windows 10 19045 when
+`SLEEP_CONTROL_REG` and `SLEEP_STATUS_REG` hold real registers rather
+than zeros? Note that the host's own FADT is revision 5, length 268,
+with **both of those registers zeroed** — so the shape used above
+matches shipping Lenovo firmware, which is why the hang is more
+likely to have come from Windows initialising Modern Standby without
+a Power Engine Plugin than from the table itself. Untested, because
+the registry override made it unnecessary.
 
 ---
 
@@ -401,17 +685,79 @@ arguments and arbitrary machine arguments from the profile. It also
 needs an install step that copies the `.aml` files into
 `/opt/vmw/firmware/`. That work is not started.
 
+### The firmware metadata rewrite had never run (fixed 2026-08-28)
+
+Found while rebuilding OVMF for §6. `patch_ovmf()` in
+`modules/edk2.sh` has a second phase that rewrites firmware identity
+strings with `sed`, using values read from this host. On the tree at
+`src/edk2-stable202605`, that phase had never run, so the firmware
+shipped `EDK II` as its UEFI vendor string — readable from the guest
+through the EFI system table. VMAware does not test it, which is why
+every other check still passed, but a ring-0 detector may.
+
+The static patch adds "modified via edk2.sh" marker comments to
+exactly the lines phase 2 targets. That makes the files show as
+modified in `git status` while their values are untouched, which is
+what hid the problem.
+
+Phase 2 was applied to the tree and the firmware rebuilt. The values
+now compiled in:
+
+| PCD | Value | Source |
+|---|---|---|
+| `PcdFirmwareVendor` | `L"LENOVO"` | `/sys/class/dmi/id/bios_vendor` |
+| `PcdFirmwareVersionString` | `L"HHCN23WW"` | `bios_version` |
+| `PcdFirmwareReleaseDateString` | `L"11/08/2021"` | `bios_date` |
+| `PcdFirmwareRevision` | `0x10017` | `bios_release` 1.23 |
+| `PcdAcpiDefaultOemId` | `"LENOVO"` | FADT offset 10, 6 bytes |
+| `PcdAcpiDefaultOemTableId` | `0x20202031302d4243` | FADT offset 16 (`CB-01   `) |
+| `PcdAcpiDefaultOemRevision` | `0x1` | FADT offset 24 |
+| `PcdAcpiDefaultCreatorId` | `0x49504341` | FADT offset 28 (`ACPI`) |
+| `PcdAcpiDefaultCreatorRevision` | `0x40000` | FADT offset 32 |
+
+These now agree with the OEM ID and table ID that `modules/qemu.sh`
+writes into QEMU's `aml-build.c`, so the firmware and the emulator
+report the same identity instead of disagreeing.
+
+**A bug in `edk2.sh` was fixed at the same time.** The
+`PcdAcpiDefaultOemId` substitution matched `"INTEL "` *including its
+quotes* but put back a bare word:
+
+```sed
+s@(PcdAcpiDefaultOemId)\|"INTEL "\|@\1|'"$OEMID"'|@     # before
+s@(PcdAcpiDefaultOemId)\|"INTEL "\|@\1|"'"$OEMID"'"|@   # after
+```
+
+The result would have been `PcdAcpiDefaultOemId|LENOVO|VOID*|...`,
+which is not valid for a `VOID*` PCD. Every other string substitution
+in that block re-adds its quotes; this one was the exception. Phase 2
+also now refuses to run when the FADT read returns nothing or the OEM
+ID is not exactly 6 bytes, instead of writing an empty value into the
+firmware.
+
+Note that phase 2 must be applied to the existing tree. A clean
+re-clone would drop the MEMFD fix from §6 along with everything else,
+until `vmw patch-check edk2` and a fresh `git apply` put it back.
+
+Phase 3, the boot logo replacement, had never run either. See §6b.
+Both phases live in `patch_ovmf()`, which only executes on the
+clone path in `acquire_edk2_source()`. Answering "no" to the purge
+prompt on an existing tree skips straight to the build, so a tree set
+up that way never receives phases 2 and 3 at all. That is the
+underlying reason two separate detection surfaces were left open.
+
 ---
 
 ## 10. Useful commands
 
 ```bash
-# sudo (dev box password: 1234)
-echo '1234' | sudo -S <command>
+# sudo (password read into $VMW_SUDO once per shell, never stored)
+read -rs VMW_SUDO
+echo "$VMW_SUDO" | sudo -S <command>
 
 # Start the VM / reload kvm_amd if it didn't autoload
-echo '1234' | sudo -S virsh --connect qemu:///system start aptwannabe
-echo '1234' | sudo -S modprobe kvm_amd
+echo "$VMW_SUDO" | sudo -S virsh --connect qemu:///system start aptwannabe
+echo "$VMW_SUDO" | sudo -S modprobe kvm_amd
 
 # Rebuild the kernel (fast: ccache is set up, ~5-10 min instead of ~60)
 cd src/linux-tkg
@@ -427,10 +773,43 @@ vmw patch-check kernel
 PYTHONPATH="$PWD/python" python3 -m vmw.patches gen
 
 # Watch the guest for the jmp-$ boot hang (frozen RIP + one vCPU at 99%)
-echo '1234' | sudo -S virsh --connect qemu:///system qemu-monitor-command \
+echo "$VMW_SUDO" | sudo -S virsh --connect qemu:///system qemu-monitor-command \
   aptwannabe '{"execute":"human-monitor-command","arguments":{"command-line":"info registers"}}'
 # read guest code at the frozen RIP: gva2gpa <RIP>, then xp/Nbx <gpa>
 ```
+
+Rebuild OVMF without the interactive module. The source tree at
+`src/edk2-stable202605` already has the patch applied, so this skips
+straight to the build. It takes about 20 seconds incrementally, or a
+few minutes from clean:
+
+```bash
+cd src/edk2-stable202605
+export WORKSPACE="$(pwd)"
+export EDK_TOOLS_PATH="$WORKSPACE/BaseTools"
+export CONF_PATH="$WORKSPACE/Conf"
+[[ -x BaseTools/Source/C/bin/GenFv ]] || make -C BaseTools -j"$(nproc)"
+source edksetup.sh
+build -p OvmfPkg/OvmfPkgX64.dsc -a X64 -t GCC -b RELEASE -n 0 -s \
+  -D SECURE_BOOT_ENABLE=TRUE -D SMM_REQUIRE=TRUE \
+  -D TPM1_ENABLE=TRUE -D TPM2_ENABLE=TRUE
+
+# check the FV bases landed where you expect, then install
+grep _PCD_VALUE_PcdOvmfPeiMemFvBase \
+  Build/OvmfX64/RELEASE_GCC/X64/OvmfPkg/Sec/SecMain/DEBUG/AutoGen.h
+echo "$VMW_SUDO" | sudo -S cp -a /opt/vmw/firmware/OVMF_CODE.fd \
+                            /opt/vmw/firmware/OVMF_CODE.fd.bak
+echo "$VMW_SUDO" | sudo -S cp Build/OvmfX64/RELEASE_GCC/FV/OVMF_CODE.fd \
+                         /opt/vmw/firmware/OVMF_CODE.fd
+```
+
+Running `modules/edk2.sh` instead re-runs the whole flow, including
+the prompt to purge and re-clone the source tree. Answer "no" to the
+purge prompt to keep the patched tree.
+
+Note that pflash images load at domain start. A reboot from inside
+the guest keeps the old firmware; the guest must be shut down and
+started again.
 
 Other reference points:
 
