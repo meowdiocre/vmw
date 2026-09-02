@@ -1,0 +1,123 @@
+# Distro package tables for vmw steps. Copied verbatim from the bash
+# REQUIRED_PKGS_* arrays in modules/{virtualization,qemu,edk2}.sh.
+# Labels: "tested" = verified on this project's hardware; anything
+# else is experimental [A7] (labels carried from the bash
+# # EXPERIMENTAL markers; see docs/getting-started/installation.md).
+#
+# The kernel and vfio bash modules define NO package arrays (they run
+# on the base system: makepkg/build tools are assumed present, vfio
+# needs no extra packages). Their tables stay empty, same as bash.
+
+[metadata]
+tested_distro = "Arch"
+experimental = ["Debian", "openSUSE", "Fedora"]
+
+[virtualization]
+Arch = ["dnsmasq", "libvirt", "virt-manager", "swtpm", "qemu-base"]
+Debian = [
+  "qemu-system-x86", "ovmf", "virt-manager", "swtpm",
+  "libvirt-clients", "libvirt-daemon-system", "libvirt-daemon-config-network",
+]
+openSUSE = [
+  "libvirt", "libvirt-client", "libvirt-daemon", "virt-manager",
+  "qemu", "qemu-kvm", "ovmf", "qemu-tools", "swtpm",
+]
+Fedora = ["@virtualization", "swtpm"]
+
+[qemu]
+Arch = [
+  # build dependencies
+  "base-devel", "ninja",
+
+  # spice
+  "spice",
+
+  # usb pass-through
+  "libusb",
+
+  # usb redirection
+  "usbredir",
+]
+Debian = [
+  # Basic Build Dependencie(s)
+  "acpica-tools", "build-essential", "libfdt-dev", "libglib2.0-dev",
+  "libpixman-1-dev", "ninja-build", "python3-venv", "zlib1g-dev", "gnupg",
+  "python3-sphinx", "python3-sphinx-rtd-theme",
+
+  # Spice Dependencie(s)
+  "libspice-server-dev",
+
+  # USB passthrough Dependencie(s)
+  "libusb-1.0-0-dev",
+
+  # USB redirection Dependencie(s)
+  "libusbredirhost-dev", "libusbredirparser-dev",
+]
+openSUSE = [
+  # Basic Build Dependencie(s)
+  "acpica", "bzip2", "gcc-c++", "gpg2", "glib2-devel", "make", "qemu",
+  "libpixman-1-0-devel", "python3-Sphinx", "ninja",
+
+  # Spice Dependencie(s)
+  "spice-server",
+
+  # USB passthrough Dependencie(s)
+  "libusb-1_0-devel",
+
+  # USB redirection Dependencie(s)
+  "libusbredir-devel",
+]
+Fedora = [
+  # Basic Build Dependencie(s)
+  "acpica-tools", "bzip2", "glib2-devel", "libfdt-devel", "ninja-build",
+  "pixman-devel", "python3", "zlib-ng-devel", "gnupg2",
+
+  # Spice Dependencie(s)
+  "spice-server-devel",
+
+  # USB passthrough Dependencie(s)
+  "libusb1-devel",
+
+  # USB redirection Dependencie(s)
+  "usbredir-devel",
+]
+
+[edk2]
+Arch = [
+  # build dependencies
+  "base-devel", "nasm", "acpica",
+
+  # script dependencies
+  "git", "virt-firmware",
+]
+Debian = [
+  # build dependencies
+  "build-essential", "nasm", "acpica-tools", "uuid-dev",
+
+  # script dependencies
+  "git", "python-is-python3", "python3-virt-firmware",
+]
+openSUSE = [
+  # build dependencies
+  "gcc", "gcc-c++", "make", "nasm", "acpica", "libuuid-devel",
+
+  # script dependencies
+  "git", "python3", "virt-firmware",
+]
+Fedora = [
+  # build dependencies
+  "gcc", "make", "nasm", "acpica-tools", "libuuid-devel",
+
+  # script dependencies
+  "git", "python3", "python3-virt-firmware",
+]
+
+# kernel/vfio: bash modules define no REQUIRED_PKGS_* arrays.
+[kernel]
+any = []
+
+[vfio]
+any = []
+
+[deploy]
+any = []

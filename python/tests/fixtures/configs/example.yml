@@ -1,0 +1,18 @@
+# VMW per-VM profile.
+# Only what differs from configs/_defaults.yml lives here; every other
+# value (cpu, boot, features, hyperv, clock, pm, most of device, ...) is
+# inherited from that base. Patch selection is omitted so the build picks
+# the Intel/AMD patch for whatever host it runs on.
+
+name: example
+
+vm:
+  memory_mib: 8192
+  vcpus: 8
+
+device:
+  disk_path: /var/lib/libvirt/images/example.qcow2
+  disk_size_gb: 150
+  # Expose an intel vIOMMU so Windows reports Kernel DMA Protection
+  # (Vanguard On-Demand). Adds the DMAR stealth patch to the qemu build.
+  viommu: true

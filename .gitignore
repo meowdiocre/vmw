@@ -1,0 +1,28 @@
+src
+logs
+smbios.bin
+config.xml
+configs/*.xml
+configs/*.yml
+!configs/_defaults.yml
+!configs/vmud.yml
+.vmw/
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+site/
+coverage.xml
+*.egg-info/
+
+# tool caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.import_linter_cache/
+
+# build artifacts
+build/
+dist/

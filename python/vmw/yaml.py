@@ -1,0 +1,43 @@
+"""Flatten a YAML profile into CFG_* shell variable assignments.
+
+Usage:
+  python3 -m vmw.yaml <profile.yml>
+
+Output lines are `CFG_<UPPER_SNAKE>=<value>` suitable for `eval` in bash.
+"""
+import sys
+
+import yaml
+
+
+def flatten(prefix, node, out):
+    for key, value in node.items():
+        name = f"{prefix}.{key}" if prefix else key
+        if isinstance(value, dict):
+            flatten(name, value, out)
+        elif isinstance(value, (list, tuple)):
+            out[name] = " ".join(str(item) for item in value)
+        elif isinstance(value, bool):
+            out[name] = "true" if value else "false"
+        elif value is None:
+            out[name] = ""
+        else:
+            out[name] = str(value)
+
+
+def run(argv):
+    path = argv[0] if argv else "-"
+    with open(path) as handle:
+        data = yaml.safe_load(handle) or {}
+    out = {}
+    flatten("", data, out)
+    for key in sorted(out):
+        bash_key = f"CFG_{key.replace('.', '_').replace('-', '_')}"
+        bash_key = bash_key.upper()
+        value = out[key].replace('"', '\\"')
+        print(f'{bash_key}="{value}"')
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(run(sys.argv[1:]))

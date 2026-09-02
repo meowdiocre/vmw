@@ -1,0 +1,86 @@
+# VMW shared profile defaults.
+#
+# Every profile under configs/ is loaded on top of this file (loader.py
+# deep-merges the profile over these values). Keep here what is identical
+# across VMs; a profile file then carries only what differs from it 
+# typically just name, memory, and disk.
+#
+# Anything a profile sets overrides the same key here. Nested sections
+# (cpu, device, ...) merge key-by-key, so a profile can override one
+# device field without repeating the rest.
+
+cpu:
+  topology:
+    sockets: 1
+    cores: 4
+    threads: 2
+  check: none
+  migratable: "off"
+  cache: passthrough
+  maxphysaddr: passthrough
+
+boot:
+  order: "cdrom,hd"
+  menu: "on"
+  loader: /opt/vmw/firmware/OVMF_CODE.fd
+  loader_secure: "yes"
+  nvram_template: /opt/vmw/firmware/OVMF_VARS.fd
+
+features:
+  hyperv: true
+  kvm_hidden: true
+  pmu: "off"
+  vmport: "off"
+  smm: "on"
+  msrs_unknown: fault
+  ps2: "off"
+
+hyperv:
+  mode: custom
+  relaxed: "on"
+  vapic: "on"
+  spinlocks: "on"
+  spinlocks_retries: 8191
+  vendor_id_state: "on"
+  vendor_id: 1234567890ab
+
+clock:
+  offset: localtime
+  tsc_present: "yes"
+  tsc_mode: native
+  kvmclock_present: "no"
+  hypervclock_present: "yes"
+
+pm:
+  suspend_to_mem: "yes"
+  suspend_to_disk: "yes"
+
+device:
+  emulator: /opt/vmw/emulator/bin/qemu-system-x86_64
+  disk_bus: nvme
+  disk_cache: none
+  disk_io: native
+  disk_block_logical: 4096
+  disk_block_physical: 4096
+  nic_model: e1000e
+  sound_model: ich9
+  audio_type: pipewire
+  graphics: spice
+  video: vga
+  tpm: emulator
+  tpm_model: tpm-crb
+  memballoon: none
+
+paths:
+  downloads_dir: /var/lib/libvirt/boot
+  iso_path: /var/lib/libvirt/boot/Win10_22H2_English_x64v1.iso
+
+
+smbios:
+  file: /opt/vmw/firmware/smbios.bin
+
+evdev:
+  enabled: true
+
+audio:
+  pipewire: true

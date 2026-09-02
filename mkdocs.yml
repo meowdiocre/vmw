@@ -1,0 +1,50 @@
+site_name: vmw
+site_description: >-
+  VM workspace: build a detection-resistant KVM Windows guest from a
+  YAML profile.
+site_url: https://meowdiocre.github.io/vmw/
+repo_url: https://github.com/meowdiocre/vmw
+repo_name: meowdiocre/vmw
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    # Dark theme aligned with the material docs palette (plans/03).
+    scheme: slate
+  features:
+    - navigation.footer
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Usage: usage.md
+  - QEMU: qemu/index.md
+  - Firmware:
+      - firmware/index.md
+      - MEASURED_BOOT: firmware/measured-boot.md
+      - BOOT_LOGO: firmware/boot-logo.md
+      - Identity strings: firmware/identity-strings.md
+  - TPM: tpm/index.md
+  - Kernel:
+      - kernel/index.md
+      - TIMER: kernel/timer.md
+  - Operations: operations.md
+  - Manual scripts: scripts.md
+  - Roadmap: roadmap.md
+
+strict: true
+docs_dir: docs
+site_dir: site

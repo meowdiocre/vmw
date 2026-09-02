@@ -1,0 +1,13 @@
+# VMW per-VM profile.
+# Only what differs from configs/_defaults.yml lives here; every other
+# value is inherited from that base. Patch selection is omitted so the
+# build picks the Intel/AMD patch for whatever host it runs on.
+
+name: vmud
+
+vm:
+  memory_mib: 12288
+  vcpus: 8
+
+device:
+  disk_size_gb: 500

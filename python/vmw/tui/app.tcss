@@ -1,0 +1,280 @@
+/* vmw TUI theme.
+ *
+ * Colours come from Textual's design tokens, never from literals. That
+ * keeps the app correct under every built-in theme, light or dark, and
+ * lets a user switch themes from the command palette. Hardcoding hex
+ * would freeze one palette and break contrast everywhere else.
+ */
+
+/* ------------------------------------------------------------------ */
+/* Dashboard: three regions (top bar / rail / main pane)               */
+/* ------------------------------------------------------------------ */
+
+#topbar {
+    height: 2;
+    background: $panel;
+    padding: 0 1;
+}
+#topbar-host, #topbar-guest { height: 1; }
+
+#body {
+    height: 1fr;
+}
+
+#rail {
+    width: 26;
+    border-right: solid $border;
+    padding: 0 1;
+}
+.rail-title, .pane-title {
+    color: $accent;
+    text-style: bold;
+    padding: 1 1 0 1;
+}
+#profiles {
+    height: 1fr;
+    background: $surface;
+    border: round $border;
+    margin-top: 1;
+}
+.profile-name { padding: 0 1; }
+#rail-hint {
+    color: $text-muted;
+    padding: 1;
+}
+
+#mainpane {
+    width: 1fr;
+    padding: 0 1;
+}
+DataTable {
+    height: 1fr;
+    border: round $border;
+    background: $surface;
+    margin-top: 1;
+}
+DataTable > .datatable--cursor {
+    background: $primary-muted;
+}
+#domain-facts {
+    height: 5;
+    background: $surface;
+    border: round $border;
+    padding: 0 1;
+    margin: 1 0;
+    color: $foreground;
+}
+
+/* ------------------------------------------------------------------ */
+/* Wizard                                                              */
+/* ------------------------------------------------------------------ */
+
+#wizard-title {
+    padding: 1 2 0 2;
+    text-style: bold;
+    color: $primary;
+}
+
+.page-title {
+    padding: 1 2 0 2;
+    text-style: bold;
+}
+
+.page {
+    padding: 0 2;
+    height: 1fr;
+}
+
+#pages {
+    height: 1fr;
+}
+
+#profile-list, #step-list {
+    border: round $border;
+    background: $surface;
+    height: 1fr;
+}
+
+/* Not docked. Docking this bottom put its lower rows underneath the
+ * Footer, which is also docked bottom, and the buttons came out clipped.
+ * In normal flow after #pages (height 1fr) it sits directly above the
+ * Footer with nothing overlapping. */
+#wizard-nav {
+    height: auto;
+    padding: 1 2;
+    background: $panel;
+}
+
+#wizard-nav Button {
+    margin-right: 2;
+}
+
+#summary-text {
+    padding: 1 2;
+    color: $foreground;
+}
+
+/* ------------------------------------------------------------------ */
+/* Build and log screens                                               */
+/* ------------------------------------------------------------------ */
+
+#build-header {
+    padding: 1 2 0 2;
+    text-style: bold;
+    color: $primary;
+}
+
+#build-header.done {
+    color: $success;
+}
+
+#build-header.failed {
+    color: $error;
+}
+
+#build-header.cancelled {
+    color: $warning;
+}
+
+#progress {
+    padding: 0 2;
+}
+
+#log-wrap, #log-view-wrap {
+    padding: 1 2;
+    height: 1fr;
+}
+
+RichLog {
+    border: round $border;
+    background: $surface;
+    scrollbar-size-vertical: 1;
+}
+
+#log-title {
+    padding: 1 2 0 2;
+    color: $text-muted;
+}
+
+/* ------------------------------------------------------------------ */
+/* Modals                                                              */
+/* ------------------------------------------------------------------ */
+
+/* Without this a ModalScreen lays its child out at the top-left corner,
+ * so the dialog hugs 0,0 and reads as a rendering fault. Centring it and
+ * dimming what is behind is what makes it look like a dialog. */
+ModalScreen {
+    align: center middle;
+    background: $background 60%;
+}
+
+#dialog {
+    width: 60;
+    max-width: 90%;
+    height: auto;
+    max-height: 80%;
+    border: thick $primary;
+    background: $panel;
+    padding: 1 2;
+}
+
+#question {
+    padding-bottom: 1;
+    text-style: bold;
+}
+
+/* Keys spelled out inside the dialog. A modal covers the Footer, so
+ * without this the available keys are invisible while it is open. */
+#modal-help {
+    padding-bottom: 1;
+    color: $text-muted;
+}
+
+#buttons {
+    height: auto;
+    padding-top: 1;
+    align-horizontal: right;
+}
+
+#buttons Button {
+    margin-left: 2;
+}
+
+#error {
+    color: $error;
+    padding-top: 1;
+}
+
+#choices {
+    height: auto;
+    max-height: 16;
+    border: round $border;
+    background: $surface;
+}
+
+/* ------------------------------------------------------------------ */
+/* Profile editor                                                      */
+/* ------------------------------------------------------------------ */
+
+#editor-title {
+    padding: 1 2 0 2;
+    text-style: bold;
+    color: $primary;
+}
+#editor-status {
+    padding: 0 2;
+    color: $text-muted;
+}
+#editor-status.error { color: $error; }
+#editor-body {
+    height: 1fr;
+    padding: 0 2;
+}
+.section-head {
+    color: $accent;
+    text-style: bold;
+    padding: 1 0 0 0;
+}
+.field-row {
+    height: auto;
+    align-vertical: middle;
+    padding: 0 0 0 2;
+}
+.field-label {
+    width: 22;
+    color: $text-muted;
+}
+.field-row Select, .field-row Input {
+    width: 1fr;
+    max-width: 40;
+}
+.field-row Switch { height: auto; }
+
+/* ------------------------------------------------------------------ */
+/* Help overlay                                                        */
+/* ------------------------------------------------------------------ */
+
+#help-dialog {
+    width: 68;
+    max-width: 92%;
+    height: auto;
+    max-height: 85%;
+    border: thick $primary;
+    background: $panel;
+    padding: 1 2;
+}
+#help-title {
+    text-style: bold;
+    color: $primary;
+    padding-bottom: 1;
+}
+.help-section {
+    color: $accent;
+    text-style: bold;
+    padding-top: 1;
+}
+.help-row { color: $text-muted; }
+.help-foot {
+    color: $text-muted;
+    padding-top: 1;
+}

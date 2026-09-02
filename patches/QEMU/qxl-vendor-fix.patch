@@ -1,0 +1,17 @@
+# Source: v11.0.3
+# Applied by: VMW
+# (checksum tracked in patches/checksums.sha256)
+
+diff --git a/hw/display/qxl.c b/hw/display/qxl.c
+index 3d4b563..7626411 100644
+--- a/hw/display/qxl.c
++++ b/hw/display/qxl.c
+@@ -2483,7 +2483,7 @@ static void qxl_pci_class_init(ObjectClass *klass, const void *data)
+     DeviceClass *dc = DEVICE_CLASS(klass);
+     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
+ 
+-    k->vendor_id = REDHAT_PCI_VENDOR_ID;
++    k->vendor_id = PCI_VENDOR_ID_REDHAT;  // Use the QEMU-patched vendor ID instead of the spice header value.
+     k->device_id = QXL_DEVICE_ID_STABLE;
+     set_bit(DEVICE_CATEGORY_DISPLAY, dc->categories);
+     device_class_set_legacy_reset(dc, qxl_reset_handler);

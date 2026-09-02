@@ -1,0 +1,58 @@
+From: vmw
+Subject: [PATCH] qemu: defeat the DMAR IOAPIC pseudo-bus signature
+
+Only relevant when a virtual IOMMU is exposed to the guest (<iommu> in
+the domain XML). Stock QEMU's build_dmar_q35() advertises the
+root-complex IOAPIC on pseudo-bus 0xFF (Q35_PSEUDO_BUS_PLATFORM). No
+physical Intel VT-d platform uses 0xFF there, so VM-detection tools read
+the DMAR table and key on it as a QEMU signature. With no <iommu> the
+DMAR table is never emitted, which is why this branch only fires once a
+vIOMMU is enabled.
+
+The change is functionally inert. The advertised bus byte is never read
+at runtime: the IOAPIC's interrupt-remapping source-id is built from the
+real root bus in intel_iommu.c (vtd_host_dma_iommu on the root PCIBus
+with Q35_PSEUDO_DEVFN_IOAPIC). Stock QEMU already runs with the table
+saying 0xFF00 while the runtime SID is 0x0000; that only works because
+guests apply SVT=NONE (no source validation) to the IOAPIC IRTEs. 0xF0
+is a bus number real Intel PCH firmware uses for the IOAPIC device
+scope, high enough not to collide with the guest's low-numbered PCI
+buses.
+
+Applies on top of the AMD/Intel spoofing patch (different function).
+Verified against QEMU v11.0.3: applies clean to the pristine tag and
+stacked on AMD-v11.0.3.patch.
+---
+diff --git a/hw/i386/acpi-build.c b/hw/i386/acpi-build.c
+index f622b91..ff8afb1 100644
+--- a/hw/i386/acpi-build.c
++++ b/hw/i386/acpi-build.c
+@@ -1600,8 +1555,26 @@ build_dmar_q35(GArray *table_data, BIOSLinker *linker, const char *oem_id,
+     build_append_int_noprefix(table_data, 0, 2); /* Reserved */
+     /* Enumeration ID */
+     build_append_int_noprefix(table_data, ACPI_BUILD_IOAPIC_ID, 1);
+-    /* Start Bus Number */
+-    build_append_int_noprefix(table_data, Q35_PSEUDO_BUS_PLATFORM, 1);
++    /*
++     * Start Bus Number.
++     *
++     * Stock QEMU advertises the IOAPIC on pseudo-bus 0xFF
++     * (Q35_PSEUDO_BUS_PLATFORM). No physical Intel VT-d platform uses
++     * 0xFF here, so VM-detection tools key on it as a QEMU signature.
++     *
++     * This value is only advertised in the table: the runtime interrupt
++     * remapping source-id is built from the real root bus in
++     * intel_iommu.c (vtd_host_dma_iommu on the root PCIBus with
++     * Q35_PSEUDO_DEVFN_IOAPIC), so it never reads this byte. Stock QEMU
++     * already runs with the table saying 0xFF00 while the runtime SID is
++     * 0x0000; that only works because guests apply SVT=NONE (no source
++     * validation) to the IOAPIC IRTEs. Changing the advertised bus is
++     * therefore functionally inert - if it were validated, stock QEMU
++     * would already fault. 0xF0 is a bus number real Intel PCH firmware
++     * uses for the IOAPIC device scope, and is high enough not to collide
++     * with the guest's low-numbered PCI buses.
++     */
++    build_append_int_noprefix(table_data, 0xF0 /* was Q35_PSEUDO_BUS_PLATFORM */, 1);
+     /* Path, {Device, Function} pair */
+     build_append_int_noprefix(table_data, PCI_SLOT(Q35_PSEUDO_DEVFN_IOAPIC), 1);
+     build_append_int_noprefix(table_data, PCI_FUNC(Q35_PSEUDO_DEVFN_IOAPIC), 1);

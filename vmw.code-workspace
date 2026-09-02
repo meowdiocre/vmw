@@ -1,0 +1,95 @@
+{
+  "folders": [
+    {
+      "name": "vmw (app)",
+      "path": "."
+    },
+    {
+      "name": "linux-tkg (kernel src)",
+      "path": "src/linux-tkg/linux-src-git"
+    },
+    {
+      "name": "qemu (v11.0.3 src)",
+      "path": "src/v11.0.3"
+    },
+    {
+      "name": "edk2 / ovmf src",
+      "path": "src/edk2-stable202605"
+    },
+    {
+      "name": "VMAware (detector)",
+      "path": "../VMAware"
+    }
+  ],
+  "settings": {
+    "python.defaultInterpreterPath": "${workspaceFolder:vmw (app)}/.venv/bin/python",
+    "python.analysis.extraPaths": [
+      "${workspaceFolder:vmw (app)}/python"
+    ],
+
+    "// note": "The kernel tree is ~28G; QEMU/EDK2 add ~2.3G. The excludes below keep files browsable but keep search and the file-watcher off build output, or VS Code stalls indexing.",
+
+    "// files.exclude note": "Hide the vmw build trees by their specific names, NOT a bare 'src' - a bare 'src' also hides VMAware/src, where vmaware.hpp lives. These three paths exist only under vmw/src, so VMAware's source stays visible.",
+    "files.exclude": {
+      "**/__pycache__": true,
+      "**/*.pyc": true,
+      "**/.ruff_cache": true,
+      "**/.pytest_cache": true,
+      "**/*.egg-info": true,
+      "src/linux-tkg": true,
+      "src/v11.0.3": true,
+      "src/edk2-stable202605": true,
+      ".venv": true
+    },
+
+    "search.exclude": {
+      "**/.git": true,
+      "**/Build": true,
+      "**/build": true,
+      "**/pkg": true,
+      "**/*.o": true,
+      "**/*.a": true,
+      "**/*.ko": true,
+      "**/*.mod": true,
+      "**/*.cmd": true,
+      "**/*.pkg.tar.zst": true,
+      "**/__pycache__": true,
+      "**/.vmw/patchcheck": true,
+      "**/vmlinux": true,
+      "**/System.map": true
+    },
+
+    "files.watcherExclude": {
+      "**/.git/**": true,
+      "**/Build/**": true,
+      "**/build/**": true,
+      "**/pkg/**": true,
+      "**/.vmw/**": true,
+      "**/src/linux-tkg/linux-src-git/**": true,
+      "**/src/v11.0.3/build/**": true,
+      "**/src/edk2-stable202605/Build/**": true,
+      "**/__pycache__/**": true,
+      "**/node_modules/**": true
+    },
+
+    "// clangd owns C/C++": "clangd handles a 28G kernel tree far better than cpptools. Turn cpptools' IntelliSense off so the two do not fight over completion and diagnostics; cpptools stays available for debugging only.",
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.autocomplete": "disabled",
+    "C_Cpp.errorSquiggles": "disabled",
+
+    "files.associations": {
+      "*.mypatch": "diff",
+      "*.dsl": "c"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "ms-python.python",
+      "charliermarsh.ruff",
+      "llvm-vs-code-extensions.vscode-clangd"
+    ],
+    "unwantedRecommendations": [
+      "ms-vscode.cpptools"
+    ]
+  }
+}

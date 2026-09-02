@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vmw"
+version = "0.1.0"
+description = "VM workspace: build a detection-resistant KVM Windows guest from a YAML profile"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+authors = [{ name = "meowdiocre" }]
+dependencies = [
+    "textual==8.2.8",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "lxml>=5.0",
+    "ruamel.yaml>=0.18",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "import-linter>=2.0",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.26",
+]
+
+[project.scripts]
+vmw = "vmw.app:main"
+
+[tool.setuptools.packages.find]
+where = ["python"]
+
+[tool.pytest.ini_options]
+testpaths = ["python/tests"]
+addopts = "-q"
+markers = [
+    "live: needs the real machine (skipped in CI; run locally with -m live)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["src", "logs"]
+
+[tool.ruff.format]
+exclude = [
+    "python/vmw/__init__.py",
+    "python/vmw/__main__.py",
+    "python/vmw/yaml.py",
+    "python/vmw/state.py",
+    "python/vmw/patches.py",
+    "python/vmw/genxml.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+# Legacy modules are ported incrementally; their lint debt travels
+# with them. New code must stay clean.
+per-file-ignores = { "python/vmw/genxml.py" = ["E501"] }
+
+[tool.importlinter]
+root_package = "vmw"
+
+[[tool.importlinter.contracts]]
+name = "Frontends are adapters only (no vmw.app/tui imports below the frontend layer)"
+type = "forbidden"
+source_modules = [
+    "vmw.workflow",
+    "vmw.steps",
+    "vmw.profiles",
+    "vmw.infra",
+    "vmw.genxml",
+    "vmw.patches",
+]
+forbidden_modules = ["vmw.app", "vmw.tui"]
+
+[[tool.importlinter.contracts]]
+name = "Infra imports nothing above its layer"
+type = "independence"
+modules = ["vmw.infra"]
+
+[[tool.importlinter.contracts]]
+name = "Workflow depends only on domain + infra (no steps/tui)"
+type = "forbidden"
+source_modules = ["vmw.workflow"]
+forbidden_modules = ["vmw.steps", "vmw.tui", "vmw.genxml"]
